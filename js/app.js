@@ -7,6 +7,7 @@ import {
   validateDay, validateWithdrawal, formatMinutes, parseTime,
 } from './calc.js';
 import { buildMonthCsv, downloadCsv } from './csv.js';
+import { enhanceTimeInputs } from './time24.js';
 import {
   $, $$, escapeHtml, todayStr, nowTime, formatDateLong, formatDateShort, toast,
   confirmDialog, setError,
@@ -647,6 +648,7 @@ function registerServiceWorker() {
 async function main() {
   applyTheme();
   renderThemeButton();
+  enhanceTimeInputs();
   $('#btn-theme').addEventListener('click', () => { cycleTheme(); renderThemeButton(); });
   registerServiceWorker();
 

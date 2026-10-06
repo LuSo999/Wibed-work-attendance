@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Wibed docházka</title>
+  <title>Docházka</title>
   <meta name="description" content="Evidence pracovní docházky a banky přesčasů.">
   <meta name="theme-color" content="#4f46e5">
   <link rel="manifest" href="./manifest.json">
@@ -37,10 +37,11 @@
     .tabular { font-variant-numeric: tabular-nums; }
     dialog::backdrop { background: rgb(15 23 42 / .55); backdrop-filter: blur(2px); }
     .pb-safe { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + .5rem); }
-    input[type="time"]::-webkit-calendar-picker-indicator,
     input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
-    .dark input[type="time"]::-webkit-calendar-picker-indicator,
     .dark input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+    /* Nápis „Docházka“ se srdíčkem místo „o“ */
+    .wordmark { font-weight: 800; letter-spacing: -.02em; white-space: nowrap; }
+    .wordmark-heart { display: inline-block; width: .62em; height: .62em; margin: 0 .03em; vertical-align: -.02em; color: #f43f5e; }
   </style>
 </head>
 <body class="min-h-screen bg-slate-100 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
@@ -77,8 +78,7 @@
   <section id="screen-auth" class="flex min-h-screen items-center justify-center px-4 py-10" hidden>
     <div class="w-full max-w-sm">
       <div class="mb-6 text-center">
-        <img src="./icons/icon.svg" alt="" class="mx-auto h-16 w-16 rounded-2xl shadow">
-        <h1 class="mt-4 text-2xl font-bold">Wibed docházka</h1>
+        <h1 class="wordmark text-5xl" aria-label="Docházka">D<svg class="wordmark-heart" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>cházka</h1>
         <p class="text-slate-500 dark:text-slate-400">Evidence docházky a banky přesčasů</p>
       </div>
       <div class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
@@ -112,8 +112,7 @@
   <section id="screen-app" hidden>
     <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/85 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85" style="padding-top: env(safe-area-inset-top, 0px)">
       <div class="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
-        <img src="./icons/icon.svg" alt="" class="h-8 w-8 rounded-lg">
-        <span class="font-bold">Docházka</span>
+        <span class="wordmark text-2xl" role="img" aria-label="Docházka">D<svg class="wordmark-heart" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>cházka</span>
         <nav class="ml-4 hidden gap-1 md:flex" aria-label="Sekce">
           <button data-tab="overview" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium">Přehled</button>
           <button data-tab="month" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium">Měsíc</button>
@@ -163,7 +162,7 @@
             <label class="block">
               <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Čas</span>
               <div class="mt-1 flex gap-2">
-                <input id="entry-time" type="time" class="tabular w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-2xl font-semibold dark:border-slate-700 dark:bg-slate-800">
+                <input id="entry-time" type="time" data-time24 class="tabular w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-2xl font-semibold dark:border-slate-700 dark:bg-slate-800">
                 <button id="btn-now" type="button" class="shrink-0 rounded-xl border border-slate-300 px-4 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Teď</button>
               </div>
             </label>
@@ -273,11 +272,11 @@
         <div id="dlg-day-times" class="grid grid-cols-2 gap-3">
           <label class="block">
             <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Příchod</span>
-            <input name="arrival" type="time" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+            <input name="arrival" type="time" data-time24 data-optional class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
           </label>
           <label class="block">
             <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Odchod</span>
-            <input name="departure" type="time" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+            <input name="departure" type="time" data-time24 data-optional class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
           </label>
         </div>
         <label class="block">
