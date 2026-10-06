@@ -40,7 +40,8 @@ Data ve Firestore:
 - `users/{uid}/attendance/{YYYY-MM-DD}` → `{ type, arrival, departure, note, updatedAt }`
 - `users/{uid}/overtimeBank/{id}` → `{ date, minutes, note, createdAt }` (výběry z banky)
 - `users/{uid}/settings/plan` → nastavení plánu (viz níže)
-- `users/{uid}/planOverrides/{YYYY-MM-DD}` → `{ absenceType, absenceHours, leaveAt, workedHours, note }` (výjimky dnů)
+- `users/{uid}/planOverrides/{YYYY-MM-DD}` → `{ absenceType, absenceHours, arriveAt, leaveAt, workedHours, clearFixed, note }` (výjimky dnů;
+  `clearFixed` = `'arrival' | 'leave' | 'both'`, `note` max. 200 znaků – oddělená od poznámky v docházce)
 
 U záznamu docházky slouží `type` jako typ nepřítomnosti. `absenceHours` (v hodinách, prázdné = celý den) určuje
 částečnou nepřítomnost a `filled: true` označuje automaticky doplněný záznam.
@@ -137,6 +138,7 @@ každý měsíc se vyrovnává na nulu samostatně.
 | `dailyFundHours` | 8 | denní fond, platí pro **celou aplikaci** (přesčasy, banka, měsíční fond) |
 | `maxWorkedHoursPerDay` | 10 | strop odpracovaných hodin běžného dne |
 | `breakAfterHours`, `breakLengthMinutes` | 6, 30 | polední přestávka: za každých celých `breakAfterHours` pobytu se odečte `breakLengthMinutes` (0 = bez přestávky). Platí pro **celou aplikaci**. |
+| `ruleVersions` | 1 verze | historie pravidel výpočtu `[{ from, dailyFundHours, breakAfterHours, breakLengthMinutes }]` – každý den se počítá podle verze platné k jeho datu |
 | `parityFlip` | false | prohodí lichý a sudý týden |
 | `schedule.odd/even.{1–5}` | prázdné | `{ arriveAt, leaveAt }` – volitelný pevný příchod a odchod pro den lichého/sudého ISO týdne. Dřívější formát (jen čas odchodu) se načte jako `leaveAt`. |
 
@@ -176,8 +178,18 @@ Uložit ho ale jde, je to jen upozornění.
 **Tabulka plánu:** sloupce Příchod, Odchod, Plán (h) a Skutečnost (h). U proběhlých dnů jsou časy skutečné,
 u budoucích plánované (kurzívou, tlumeně).
 
-**Výjimky dnů:** klepnutím na dnešní nebo budoucí den v plánu nastavíte nepřítomnost (celý den nebo hodiny), pevný příchod či odchod
-nebo pevné hodiny práce. Takový den je pevný a ostatní dny se dopočítají kolem něj.
+**Výjimky dnů:** klepnutím na dnešní nebo budoucí den v plánu nastavíte nepřítomnost (celý den nebo hodiny), pevný příchod či odchod,
+pevné hodiny práce, poznámku k plánu, nebo **zrušíte pevný čas z rozvrhu** pro ten den (zvlášť příchod a odchod). Proběhlé dny
+výjimku nemají – upravuje se jejich docházka.
+
+- Priorita konců dne: skutečný příchod > výjimka (`arriveAt`/`leaveAt`) > rozvrh (pokud ho `clearFixed` nezrušil) > kotva.
+  `clearFixed` ruší jen časy z rozvrhu, ne kotvu. Den se zrušeným pevným časem se stane běžným a podílí se na rozložení deficitu
+  (štítek „bez pevného odchodu“).
+- Odchod musí být po příchodu (jinak výjimku nejde uložit); odchod před koncem pevné doby je jen upozornění.
+- **Zrušit výjimku** smaže dokument a den se vrátí do stavu podle rozvrhu.
+- **Zrušit pevné časy v rozsahu…** vytvoří či doplní výjimky (`clearFixed`) pro dnešní a budoucí pracovní dny v rozsahu, které daný
+  pevný čas v rozvrhu mají. Akci jde jedním krokem vrátit (tlačítko Vrátit); zápis i vrácení jsou atomické.
+- Poznámka k plánu se ukazuje v řádku plánu (na mobilu rozbalitelně) a v kartě „Dnes“ na hlavní obrazovce.
 
 **Doplnit docházku:** v dialogu dne nebo hromadně v plánu (s náhledem) nastaví odchod tak, aby den vyšel přesně do fondu.
 Pobyt = nejmenší pobyt pro (fond − nepřítomnost), u běžného dne 8:30. V režimu příchodu (nebo při zaznamenaném příchodu)
@@ -203,11 +215,20 @@ node --test          # Node.js 20+
 
 Alternativně v prohlížeči: spusťte lokální server a otevřete <http://localhost:8000/tests/run.html>.
 
+## Ochrana historie při změně pravidel
+
+Změna denního fondu nebo pravidla přestávky by jinak přepočítala i uzavřené dny a banku přesčasů. Proto se před uložením otevře
+potvrzovací dialog s dopočtenou změnou zůstatku banky (před → po) a počtem dotčených uzavřených dnů. Zvolíte:
+
+- **Platí od** (výchozí dnes): uloží se nová verze pravidel s datem platnosti, starší dny se dál počítají podle původních pravidel.
+- **Zpětně pro všechna data**: pravidla se přepíší pro celou historii.
+
+Bez potvrzení se změna neuloží. Přehled platnosti pravidel je v nastavení pod přestávkou.
+
 ## Úprava pravidel
 
 Výchozí interval a délka přestávky i výchozí denní fond jsou na jednom místě, v konstantě `RULES` v [`js/calc.js`](js/calc.js).
-Každý uživatel si je může přepsat v **Plán → Nastavení pracovní doby a plánu**. Změna se promítne i do minulých měsíců
-(přesčasy a banka se vždy přepočítávají ze záznamů).
+Každý uživatel si je může přepsat v **Plán → Nastavení pracovní doby a plánu** – s datem platnosti (viz Ochrana historie).
 Státní svátky ČR (včetně pohyblivého Velkého pátku a Velikonočního pondělí) počítá funkce `czechHolidays`.
 
 ## Ikony

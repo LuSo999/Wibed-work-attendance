@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_SETTINGS, normalizeSettings, settingsWarnings, leaveWarning, arrivalWarning, isoWeek,
   weekParity, scheduledLeave, workedForStay, stayForWorked, buildMonthPlan, fillRecord, fillCandidates,
-  rulesFromSettings, switchAnchorMode, timeWarnings,
+  rulesFromSettings, switchAnchorMode, timeWarnings, validateOverride, bulkClearFixed, isEmptyOverride,
+  applyRuleChange, ruleChangeImpact, isRuleChange, mergeClearFixed, RULES_SINCE_EVER,
 } from '../js/plan.js';
 import { dayResult, monthFund } from '../js/calc.js';
 
@@ -14,7 +15,8 @@ const H = 60;
 const FEB_FUND = 20 * 8 * H;
 
 function settings(patch = {}) {
-  const base = normalizeSettings(DEFAULT_SETTINGS);
+  // bez ruleVersions, aby se pravidla z patche (fond, přestávka) převzala jako jediná verze
+  const { ruleVersions, ...base } = normalizeSettings(DEFAULT_SETTINGS);
   return normalizeSettings({
     ...base,
     ...patch,
@@ -279,7 +281,9 @@ test('nastavitelný denní fond se promítne do fondu měsíce i přesčasu', ()
 
 test('vlastní pravidlo přestávky v plánu a doplnění', () => {
   // výchozí
-  assert.deepEqual(rulesFromSettings(settings()), { DAILY_FUND_MIN: 480, BREAK_INTERVAL_MIN: 360, BREAK_MIN: 30 });
+  const def = rulesFromSettings(settings());
+  assert.deepEqual([def.DAILY_FUND_MIN, def.BREAK_INTERVAL_MIN, def.BREAK_MIN], [480, 360, 30]);
+  assert.equal(def.versions.length, 1);
   // 45 min po každých 6 h → běžný den 8:45 pobytu
   const s45 = settings({ breakLengthMinutes: 45 });
   const r45 = rulesFromSettings(s45);
@@ -454,4 +458,131 @@ test('doplnění docházky v režimu odchodu dopočítá příchod zpět od kotv
   assert.equal(fillRecord('2027-02-01', { date: '2027-02-01', type: 'work', arrival: '07:00' }, dep).departure, '15:30');
   // pevný odchod z rozvrhu
   assert.equal(fillRecord('2027-02-01', undefined, settings({ ...DEP, schedule: { odd: { 1: '13:30' } } })).arrival, '05:00');
+});
+
+// ---------------------------------------------------------------------------
+// Výjimky: jiný čas, zrušení pevného času z rozvrhu, hromadné akce, poznámky
+// ---------------------------------------------------------------------------
+const MON_WED_14 = { schedule: { odd: { 1: '14:00', 3: '14:00' } } };
+
+test('výjimka s jiným odchodem než rozvrh', () => {
+  const p = plan({ schedule: { odd: { 1: '14:30' } }, overrides: [{ date: '2027-02-01', leaveAt: '15:30' }] });
+  const d = day(p, '2027-02-01');
+  assert.equal(d.kind, 'fixed');
+  assert.equal(d.plannedLeave, '15:30');
+  assert.equal(d.plannedWorked, 9 * H);
+  assert.equal(total(p), FEB_FUND);
+});
+
+test('zrušení pevného času z rozvrhu: den je běžný a podílí se na deficitu', () => {
+  const base = plan(MON_WED_14);                       // 4 pevné dny po 7:30 → deficit 2:00
+  assert.equal(day(base, '2027-02-01').kind, 'fixed');
+  const p = plan({ ...MON_WED_14, overrides: [{ date: '2027-02-01', clearFixed: 'leave' }] });
+  const d = day(p, '2027-02-01');
+  assert.equal(d.kind, 'regular');
+  assert.equal(d.clearedFixed, 'leave');
+  assert.equal(d.explicitLeave, false);
+  assert.equal(total(p), FEB_FUND);
+  // deficit 1:30 (3 pevné dny) se rozloží na 17 běžných dnů včetně odblokovaného pondělí
+  assert.equal(regularDays(p).length, 17);
+  assert.equal(regularDays(p).filter((x) => x.plannedWorked === 8 * H + 15).length, 6);
+  // clearFixed ruší jen rozvrh, ne kotvu: příchod zůstává 06:00
+  assert.equal(d.arrival, '06:00');
+  // zrušení pevného příchodu u dne bez pevného příchodu nic nemění
+  assert.equal(day(plan({ ...MON_WED_14, overrides: [{ date: '2027-02-01', clearFixed: 'arrival' }] }), '2027-02-01').kind, 'fixed');
+});
+
+test('hromadné zrušení pevných časů v rozsahu a vrácení jedním krokem', () => {
+  const sched = { schedule: { odd: { 1: '14:00', 3: '14:00' }, even: { 2: { arriveAt: '07:00', leaveAt: '15:00' } } } };
+  const existing = [{ date: '2027-02-09', note: 'zubař v 7:00' }];
+  const ops = bulkClearFixed({ from: '2027-02-01', to: '2027-02-12', what: 'leave', today: '2027-02-03', settings: settings(sched), overrides: existing });
+  // jen dnešní/budoucí pracovní dny, které pevný odchod v rozvrhu mají
+  assert.deepEqual(ops.map((o) => o.date), ['2027-02-03', '2027-02-09']);
+  assert.equal(ops[0].before, null);
+  assert.deepEqual(ops[1].after, { date: '2027-02-09', note: 'zubař v 7:00', clearFixed: 'leave' });
+  const applied = [...existing.filter((o) => !ops.some((x) => x.date === o.date)), ...ops.map((o) => o.after)];
+  const p = plan({ ...sched, today: '2027-02-03', overrides: applied });
+  assert.equal(day(p, '2027-02-03').kind, 'regular');
+  assert.equal(day(p, '2027-02-09').kind, 'regular');  // příchod 07:00 zůstává pevný, odchod se dopočítá
+  assert.equal(day(p, '2027-02-09').arrival, '07:00');
+  assert.equal(day(p, '2027-02-09').note, 'zubař v 7:00');
+  assert.equal(total(p), FEB_FUND);
+  // vrácení: obnoví se stav „before“
+  const undone = ops.map((o) => o.before).filter(Boolean);
+  const p2 = plan({ ...sched, today: '2027-02-03', overrides: undone });
+  assert.equal(day(p2, '2027-02-03').kind, 'fixed');
+  assert.equal(day(p2, '2027-02-09').kind, 'fixed');
+  // opakované spuštění nic nezmění; 'arrival' doplní jen dny s pevným příchodem
+  assert.equal(bulkClearFixed({ from: '2027-02-01', to: '2027-02-12', what: 'leave', today: '2027-02-03', settings: settings(sched), overrides: applied }).length, 0);
+  const arrOps = bulkClearFixed({ from: '2027-02-01', to: '2027-02-12', what: 'arrival', today: '2027-02-03', settings: settings(sched), overrides: applied });
+  assert.deepEqual(arrOps.map((o) => [o.date, o.after.clearFixed]), [['2027-02-09', 'both']]);
+  assert.equal(mergeClearFixed('leave', 'arrival'), 'both');
+  assert.equal(mergeClearFixed(null, null), null);
+});
+
+test('zrušení výjimky vrátí den do stavu podle rozvrhu', () => {
+  const ov = { date: '2027-02-01', leaveAt: '16:00', clearFixed: 'leave', note: 'porada' };
+  assert.equal(day(plan({ ...MON_WED_14, overrides: [ov] }), '2027-02-01').plannedLeave, '16:00');
+  const back = day(plan({ ...MON_WED_14, overrides: [] }), '2027-02-01');
+  assert.equal(back.kind, 'fixed');
+  assert.equal(back.plannedLeave, '14:00');
+  assert.equal(back.note, '');
+  assert.equal(isEmptyOverride({ date: '2027-02-01', note: '  ' }), true);
+  assert.equal(isEmptyOverride({ date: '2027-02-01', clearFixed: 'leave' }), false);
+  assert.equal(isEmptyOverride({ date: '2027-02-01', note: 'x' }), false);
+});
+
+test('validace výjimky: odchod po příchodu, poznámka, upozornění', () => {
+  const s = settings({ schedule: { odd: { 1: '14:30' } } });
+  assert.match(validateOverride({ date: '2027-02-01', arriveAt: '10:00', leaveAt: '09:00' }, s).error, /musí být po příchodu/);
+  // pevný příchod z výjimky po odchodu z rozvrhu
+  assert.match(validateOverride({ date: '2027-02-01', arriveAt: '15:00' }, s).error, /14:30.*15:00/);
+  // po zrušení pevného odchodu je stejný příchod v pořádku
+  assert.equal(validateOverride({ date: '2027-02-01', arriveAt: '15:00', clearFixed: 'leave' }, s).error, null);
+  assert.match(validateOverride({ date: '2027-02-01', note: 'x'.repeat(201) }, s).error, /200 znaků/);
+  assert.equal(validateOverride({ date: '2027-02-01', note: 'x'.repeat(200) }, s).error, null);
+  assert.match(validateOverride({ date: '2027-02-01', clearFixed: 'nic' }, s).error, /Neplatná/);
+  // odchod před coreEnd je jen upozornění
+  const v = validateOverride({ date: '2027-02-01', leaveAt: '12:00' }, s);
+  assert.equal(v.error, null);
+  assert.match(v.warnings[0], /Porušuješ pevnou pracovní dobu/);
+});
+
+test('poznámka výjimky přežije přepočet plánu', () => {
+  const ov = { date: '2027-02-15', note: 'Vyzvednout Aničku', clearFixed: 'leave' };
+  const p1 = plan({ ...MON_WED_14, overrides: [ov] });
+  // jiné záznamy změní deficit i plán dne, poznámka zůstává
+  const p2 = plan({ ...MON_WED_14, today: '2027-02-03', overrides: [ov], records: [work('2027-02-01', '06:00', '17:00'), work('2027-02-02', '06:00', '17:00')] });
+  assert.equal(day(p1, '2027-02-15').note, 'Vyzvednout Aničku');
+  assert.equal(day(p2, '2027-02-15').note, 'Vyzvednout Aničku');
+  assert.notEqual(day(p1, '2027-02-15').plannedWorked, day(p2, '2027-02-15').plannedWorked);
+});
+
+test('změna pravidel: verze s datem platnosti a dopad na banku', () => {
+  const s = settings();
+  const records = ['2027-02-01', '2027-02-02', '2027-02-03'].map((d) => work(d, '06:00', '14:30'));
+  assert.equal(isRuleChange(s, { breakLengthMinutes: 45 }), true);
+  assert.equal(isRuleChange(s, { breakLengthMinutes: 30 }), false);
+  assert.equal(isRuleChange(s, { maxWorkedHoursPerDay: 9 }), false);
+  // zpětně: všechny 3 dny o 15 min méně
+  const all = applyRuleChange(s, { breakLengthMinutes: 45 }, RULES_SINCE_EVER);
+  assert.equal(all.ruleVersions.length, 1);
+  assert.deepEqual(ruleChangeImpact({ records, settings: s, next: all }), { balanceBefore: 0, balanceAfter: -45, affectedDays: 3 });
+  // od 3. 2.: starší dny podle původních pravidel
+  const fromWed = applyRuleChange(s, { breakLengthMinutes: 45 }, '2027-02-03');
+  assert.equal(fromWed.ruleVersions.length, 2);
+  assert.equal(fromWed.breakLengthMinutes, 45);       // aktuální = poslední verze
+  assert.deepEqual(ruleChangeImpact({ records, settings: s, next: fromWed }), { balanceBefore: 0, balanceAfter: -15, affectedDays: 1 });
+  // fond 7,5 h od 15. 2.: fond měsíce = 10 dnů × 8 h + 10 dnů × 7,5 h
+  const fund75 = applyRuleChange(s, { dailyFundHours: 7.5 }, '2027-02-15');
+  const p = buildMonthPlan({ year: 2027, month: 2, today: '2027-02-01', settings: fund75, records: [] });
+  assert.equal(p.summary.fund, 10 * 8 * H + 10 * 7.5 * H);
+  assert.equal(total(p), p.summary.fund);
+  assert.equal(day(p, '2027-02-12').plannedLeave, '14:30');
+  assert.equal(day(p, '2027-02-15').plannedLeave, '14:00');
+  // novější změna s dřívějším datem nahradí pozdější verze
+  const again = applyRuleChange(fund75, { breakLengthMinutes: 45 }, '2027-02-10');
+  assert.deepEqual(again.ruleVersions.map((v) => [v.from, v.dailyFundHours, v.breakLengthMinutes]), [[RULES_SINCE_EVER, 8, 30], ['2027-02-10', 7.5, 45]]);
+  // uložené nastavení bez verzí (starší formát) = jedna verze z hodnot nastavení
+  assert.deepEqual(normalizeSettings({ breakLengthMinutes: 45 }).ruleVersions, [{ from: RULES_SINCE_EVER, dailyFundHours: 8, breakAfterHours: 6, breakLengthMinutes: 45 }]);
 });

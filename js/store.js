@@ -4,7 +4,7 @@
 //   users/{uid}/settings/plan            – nastavení plánu docházky
 //   users/{uid}/planOverrides/{YYYY-MM-DD} – výjimky dnů pro plán
 import {
-  collection, doc, onSnapshot, setDoc, deleteDoc, addDoc, serverTimestamp,
+  collection, doc, onSnapshot, setDoc, deleteDoc, addDoc, serverTimestamp, writeBatch,
 } from 'https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js';
 import { db } from './firebase.js';
 
@@ -73,19 +73,39 @@ export function saveSettings(uid, settings) {
   return setDoc(settingsDoc(uid), { ...settings, updatedAt: serverTimestamp() });
 }
 
-/** Uloží výjimku dne pro plán. */
-export function saveOverride(uid, {
-  date, absenceType, absenceHours, arriveAt, leaveAt, workedHours, note,
+/** Data výjimky dne pro Firestore (poznámka max. 200 znaků, clearFixed jen platné hodnoty). */
+function overrideData({
+  absenceType, absenceHours, arriveAt, leaveAt, workedHours, clearFixed, note,
 }) {
-  return setDoc(doc(overridesCol(uid), date), {
+  return {
     absenceType: absenceType || null,
     absenceHours: absenceType ? hoursOrNull(absenceHours) : null,
     arriveAt: arriveAt || null,
     leaveAt: leaveAt || null,
     workedHours: hoursOrNull(workedHours),
-    note: note?.trim() || '',
+    clearFixed: ['arrival', 'leave', 'both'].includes(clearFixed) ? clearFixed : null,
+    note: (note ?? '').trim().slice(0, 200),
     updatedAt: serverTimestamp(),
-  });
+  };
+}
+
+/** Uloží výjimku dne pro plán. */
+export function saveOverride(uid, override) {
+  return setDoc(doc(overridesCol(uid), override.date), overrideData(override));
+}
+
+/**
+ * Zapíše více výjimek najednou (atomicky): [{date, data}] – data null = smazat.
+ * Používá hromadné zrušení pevných časů i jeho vrácení.
+ */
+export function applyOverrides(uid, ops) {
+  const batch = writeBatch(db);
+  for (const { date, data } of ops) {
+    const ref = doc(overridesCol(uid), date);
+    if (data) batch.set(ref, overrideData({ ...data, date }));
+    else batch.delete(ref);
+  }
+  return batch.commit();
 }
 
 export function deleteOverride(uid, date) {

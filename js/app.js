@@ -436,6 +436,10 @@ function renderTodayPlan() {
   const sub = $('#today-plan-sub');
   const btn = $('#btn-use-plan');
   btn.hidden = true;
+  // poznámka z plánu (výjimka dne) – oddělená od poznámky v docházce
+  const note = state.overrides.get(todayStr())?.note?.trim();
+  $('#today-plan-note').textContent = note ? `📝 ${note}` : '';
+  $('#today-plan-note').hidden = !note;
   if (!d || (!d.workday && !d.record)) {
     title.textContent = 'Dnes se podle plánu nepracuje';
     sub.textContent = d?.holiday ?? 'víkend';
@@ -787,7 +791,7 @@ async function main() {
   bindAppEvents();
   initPlanView({
     getState: () => ({
-      settings: state.settings, records: records(), overrides: [...state.overrides.values()],
+      settings: state.settings, records: records(), overrides: [...state.overrides.values()], withdrawals: state.withdrawals,
     }),
     saveRecord,
     openDayDialog,
@@ -797,6 +801,8 @@ async function main() {
       .catch((e) => toast(`Uložení výjimky se nezdařilo: ${e.message}`, 'error')),
     deleteOverride: (date) => store.deleteOverride(state.user.uid, date)
       .catch((e) => toast(`Smazání výjimky se nezdařilo: ${e.message}`, 'error')),
+    applyOverrides: (ops) => store.applyOverrides(state.user.uid, ops)
+      .catch((e) => toast(`Uložení výjimek se nezdařilo: ${e.message}`, 'error')),
   });
   auth.watchUser(onUser);
 }

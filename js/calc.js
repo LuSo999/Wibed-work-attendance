@@ -24,7 +24,24 @@ export const RULES = Object.freeze({
 export function toRules(rules) {
   if (rules === undefined || rules === null) return RULES;
   if (typeof rules === 'number') return { ...RULES, DAILY_FUND_MIN: rules };
+  if (rules.versions?.length) return rulesForDate(rules);
   return { ...RULES, ...rules };
+}
+
+/**
+ * Pravidla platná pro datum. Verzovaná pravidla mají tvar
+ * { versions: [{ from: 'YYYY-MM-DD', DAILY_FUND_MIN, BREAK_INTERVAL_MIN, BREAK_MIN }, …] }
+ * seřazená podle `from`; platí poslední verze s from ≤ datum (bez data = aktuální).
+ * Starší dny se tak počítají podle pravidel, která tehdy platila.
+ */
+export function rulesForDate(rules, date) {
+  if (!rules?.versions?.length) return toRules(rules);
+  let pick = rules.versions[0];
+  for (const v of rules.versions) {
+    if (date === undefined || v.from <= date) pick = v;
+  }
+  const { from, ...values } = pick;
+  return { ...RULES, ...values };
 }
 
 /** Popis pravidla přestávky pro uživatele, např. „Za každých celých 6:00 h pobytu se odečte 30 min přestávky.“ */
@@ -204,7 +221,7 @@ export function isWorkday(dateStr) {
  * @param {object|number} [rules] pravidla uživatele (viz toRules), výchozí RULES
  */
 export function dayFund(dateStr, rules) {
-  return isWorkday(dateStr) ? toRules(rules).DAILY_FUND_MIN : 0;
+  return isWorkday(dateStr) ? rulesForDate(rules, dateStr).DAILY_FUND_MIN : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -273,7 +290,8 @@ export function partialAbsenceMinutes(record, fund) {
  *   partial: boolean,   // částečná nepřítomnost
  * }}
  */
-export function dayResult(record, rules) {
+export function dayResult(record, allRules) {
+  const rules = rulesForDate(allRules, record.date);
   const fund = dayFund(record.date, rules);
   const type = record.type ?? DAY_TYPES.WORK;
   const empty = {
@@ -325,9 +343,11 @@ export function workdaysInMonth(y, m) {
   return count;
 }
 
-/** Měsíční fond = pracovní dny * denní fond. */
+/** Měsíční fond = součet denních fondů pracovních dnů (fond se může během měsíce změnit). */
 export function monthFund(y, m, rules) {
-  return workdaysInMonth(y, m) * toRules(rules).DAILY_FUND_MIN;
+  let sum = 0;
+  for (let d = 1; d <= daysInMonth(y, m); d++) sum += dayFund(toDateString(y, m, d), rules);
+  return sum;
 }
 
 /**

@@ -11,7 +11,7 @@
 import {
   DAY_TYPES, isAbsenceType, breakMinutes, parseTime, toTimeString, parseDate, daysInMonth,
   toDateString, isWorkday, holidayName, weekday, monthFund, safeDayResult, hoursToMinutes,
-  formatMinutes,
+  formatMinutes, rulesForDate, bankBalance,
 } from './calc.js';
 
 /** Krok rozložení deficitu. */
@@ -58,13 +58,13 @@ function normalizeScheduleDay(v) {
   return { arriveAt: validTime(v.arriveAt, ''), leaveAt: validTime(v.leaveAt, '') };
 }
 
-/** Doplní chybějící nebo neplatné hodnoty nastavení výchozími. */
-export function normalizeSettings(raw = {}) {
+/** Nejstarší „platí od“ – verze platná odjakživa. */
+export const RULES_SINCE_EVER = '0000-01-01';
+const RULE_FIELDS = ['dailyFundHours', 'breakAfterHours', 'breakLengthMinutes'];
+
+/** Platná sada pravidel výpočtu (fond a přestávka); neplatné hodnoty → výchozí. */
+function normalizeRuleValues(raw = {}) {
   const d = DEFAULT_SETTINGS;
-  const schedule = { odd: {}, even: {} };
-  for (const week of ['odd', 'even']) {
-    for (const day of WORKDAYS) schedule[week][day] = normalizeScheduleDay(raw.schedule?.[week]?.[day]);
-  }
   // Přestávka musí být kratší než interval, jinak by delší pobyt nedal víc práce.
   let breakAfterHours = validHours(raw.breakAfterHours, d.breakAfterHours);
   let breakLengthMinutes = Number(raw.breakLengthMinutes ?? d.breakLengthMinutes);
@@ -72,6 +72,33 @@ export function normalizeSettings(raw = {}) {
     breakAfterHours = d.breakAfterHours;
     breakLengthMinutes = d.breakLengthMinutes;
   }
+  return { dailyFundHours: validHours(raw.dailyFundHours, d.dailyFundHours), breakAfterHours, breakLengthMinutes };
+}
+
+/**
+ * Verze pravidel s datem platnosti, seřazené; první platí odjakživa.
+ * Starší nastavení bez verzí = jedna verze z hodnot na nejvyšší úrovni.
+ */
+function normalizeRuleVersions(raw) {
+  const list = Array.isArray(raw.ruleVersions) && raw.ruleVersions.length
+    ? raw.ruleVersions.map((v) => ({ from: parseDate(v?.from) ? v.from : RULES_SINCE_EVER, ...normalizeRuleValues(v) }))
+    : [{ from: RULES_SINCE_EVER, ...normalizeRuleValues(raw) }];
+  list.sort((a, b) => a.from.localeCompare(b.from));
+  list[0].from = RULES_SINCE_EVER;
+  // stejné datum platnosti → platí poslední zadaná
+  return list.filter((v, i) => i === list.length - 1 || list[i + 1].from !== v.from);
+}
+
+/** Doplní chybějící nebo neplatné hodnoty nastavení výchozími. */
+export function normalizeSettings(raw = {}) {
+  const d = DEFAULT_SETTINGS;
+  const schedule = { odd: {}, even: {} };
+  for (const week of ['odd', 'even']) {
+    for (const day of WORKDAYS) schedule[week][day] = normalizeScheduleDay(raw.schedule?.[week]?.[day]);
+  }
+  const ruleVersions = normalizeRuleVersions(raw);
+  // hodnoty na nejvyšší úrovni = aktuálně platná (poslední) verze
+  const { dailyFundHours, breakAfterHours, breakLengthMinutes } = ruleVersions[ruleVersions.length - 1];
   return {
     anchorMode: raw.anchorMode === 'departure' ? 'departure' : 'arrival',
     // startTime = dřívější název pro čas příchodu
@@ -80,10 +107,11 @@ export function normalizeSettings(raw = {}) {
     latestDeparture: validTime(raw.latestDeparture, d.latestDeparture),
     coreStart: validTime(raw.coreStart, d.coreStart),
     coreEnd: validTime(raw.coreEnd, d.coreEnd),
-    dailyFundHours: validHours(raw.dailyFundHours, d.dailyFundHours),
+    dailyFundHours,
     maxWorkedHoursPerDay: validHours(raw.maxWorkedHoursPerDay, d.maxWorkedHoursPerDay),
     breakAfterHours,
     breakLengthMinutes,
+    ruleVersions,
     parityFlip: Boolean(raw.parityFlip),
     schedule,
   };
@@ -94,12 +122,57 @@ export function dailyFundMinutes(settings) {
   return hoursToMinutes(settings.dailyFundHours);
 }
 
-/** Pravidla pro calc.js (fond a přestávka) z nastavení uživatele. */
+const toCalcRules = (v) => ({
+  DAILY_FUND_MIN: hoursToMinutes(v.dailyFundHours),
+  BREAK_INTERVAL_MIN: hoursToMinutes(v.breakAfterHours),
+  BREAK_MIN: v.breakLengthMinutes,
+});
+
+/**
+ * Pravidla pro calc.js z nastavení: aktuální hodnoty na nejvyšší úrovni
+ * a verze s datem platnosti (calc.rulesForDate vybere verzi podle dne).
+ */
 export function rulesFromSettings(settings) {
+  const versions = (settings.ruleVersions?.length ? settings.ruleVersions : [{ from: RULES_SINCE_EVER, ...settings }])
+    .map((v) => ({ from: v.from, ...toCalcRules(v) }));
+  const { from, ...current } = versions[versions.length - 1];
+  return { ...current, versions };
+}
+
+/**
+ * Změna pravidel výpočtu s datem platnosti: verze od `from` dál se nahradí novou.
+ * from = RULES_SINCE_EVER přepíše pravidla zpětně pro všechna data.
+ */
+export function applyRuleChange(settings, patch, from = RULES_SINCE_EVER) {
+  const s = normalizeSettings(settings);
+  const current = s.ruleVersions[s.ruleVersions.length - 1];
+  const values = normalizeRuleValues({ ...current, ...patch });
+  const kept = s.ruleVersions.filter((v) => v.from < from);
+  return normalizeSettings({ ...s, ruleVersions: [...kept, { from, ...values }] });
+}
+
+/** Mění patch pravidla výpočtu (fond nebo přestávku)? */
+export function isRuleChange(settings, patch) {
+  return RULE_FIELDS.some((f) => f in patch && Number(patch[f]) !== Number(settings[f]));
+}
+
+/**
+ * Dopad změny pravidel na historii: zůstatek banky před a po a počet uzavřených
+ * dnů, jejichž výsledek se změní.
+ */
+export function ruleChangeImpact({ records, withdrawals = [], settings, next }) {
+  const before = rulesFromSettings(normalizeSettings(settings));
+  const after = rulesFromSettings(normalizeSettings(next));
+  let affectedDays = 0;
+  for (const r of records) {
+    const a = safeDayResult(r, before);
+    const b = safeDayResult(r, after);
+    if (a.complete && (a.credited !== b.credited || a.bankDelta !== b.bankDelta)) affectedDays++;
+  }
   return {
-    DAILY_FUND_MIN: dailyFundMinutes(settings),
-    BREAK_INTERVAL_MIN: hoursToMinutes(settings.breakAfterHours),
-    BREAK_MIN: settings.breakLengthMinutes,
+    balanceBefore: bankBalance(records, withdrawals, before),
+    balanceAfter: bankBalance(records, withdrawals, after),
+    affectedDays,
   };
 }
 
@@ -303,6 +376,107 @@ function absenceOf(source, fund) {
   return { type, minutes: minutes >= fund ? null : Math.max(0, minutes) };
 }
 
+const CLEAR_VALUES = ['arrival', 'leave', 'both'];
+const clearsArrival = (c) => c === 'arrival' || c === 'both';
+const clearsLeave = (c) => c === 'leave' || c === 'both';
+
+/** Sloučí dvě hodnoty clearFixed ('arrival' + 'leave' = 'both'). */
+export function mergeClearFixed(a, b) {
+  const arr = clearsArrival(a) || clearsArrival(b);
+  const lv = clearsLeave(a) || clearsLeave(b);
+  return arr && lv ? 'both' : arr ? 'arrival' : lv ? 'leave' : null;
+}
+
+/**
+ * Konce dne (minuty): skutečný příchod > výjimka (arriveAt/leaveAt) >
+ * rozvrh (pokud ho výjimka nezrušila přes clearFixed) > kotva. Druhý konec null = dopočítá se.
+ * clearFixed ruší jen časy z rozvrhu, ne kotvu z nastavení.
+ */
+export function dayEnds(date, settings, { override = null, record = null } = {}) {
+  const s = settings;
+  const sched = scheduledDay(date, s);
+  const clear = override?.clearFixed ?? null;
+  const actualArr = record?.arrival ? parseTime(record.arrival) : null;
+  let arr = actualArr ?? t(override?.arriveAt) ?? (clearsArrival(clear) ? null : t(sched.arriveAt));
+  let lv = t(override?.leaveAt) ?? (clearsLeave(clear) ? null : t(sched.leaveAt));
+  const explicitArrival = arr !== null && actualArr === null;
+  const explicitLeave = lv !== null;
+  // zrušený pevný čas, který rozvrh skutečně měl (a výjimka ho nenahradila)
+  const cleared = mergeClearFixed(
+    clearsArrival(clear) && sched.arriveAt && !override?.arriveAt && actualArr === null ? 'arrival' : null,
+    clearsLeave(clear) && sched.leaveAt && !override?.leaveAt ? 'leave' : null,
+  );
+  if (s.anchorMode === 'arrival') arr ??= parseTime(s.anchorTime);
+  else lv ??= parseTime(s.anchorTime);
+  return { arr, lv, actualArrival: actualArr !== null, explicitArrival, explicitLeave, cleared, schedule: sched };
+}
+
+export const NOTE_MAX = 200;
+
+/**
+ * Kontrola výjimky dne: {error, warnings}. Odchod musí být po příchodu;
+ * porušení pevné doby a hranic je jen upozornění.
+ */
+export function validateOverride(ov, settings) {
+  const s = normalizeSettings(settings);
+  const warnings = [];
+  if ((ov.note ?? '').length > NOTE_MAX) return { error: `Poznámka může mít nejvýše ${NOTE_MAX} znaků.`, warnings };
+  if (ov.clearFixed != null && !CLEAR_VALUES.includes(ov.clearFixed)) return { error: 'Neplatná hodnota zrušení pevného času.', warnings };
+  if (ov.absenceType && ov.absenceHours != null && ov.absenceHours !== '' && !(Number(ov.absenceHours) > 0)) {
+    return { error: 'Počet hodin nepřítomnosti musí být kladný.', warnings };
+  }
+  if (ov.workedHours != null && ov.workedHours !== '' && !(Number(ov.workedHours) >= 0 && Number(ov.workedHours) <= 24)) {
+    return { error: 'Pevné hodiny musí být 0–24.', warnings };
+  }
+  for (const [field, label] of [['arriveAt', 'příchodu'], ['leaveAt', 'odchodu']]) {
+    if (ov[field] && parseTime(ov[field]) === null) return { error: `Neplatný čas ${label}.`, warnings };
+  }
+  const { arr, lv } = dayEnds(ov.date, s, { override: ov });
+  const fixedHours = ov.workedHours != null && ov.workedHours !== '';
+  if (!fixedHours && arr !== null && lv !== null && lv <= arr) {
+    return { error: `Odchod (${toTimeString(lv)}) musí být po příchodu (${toTimeString(arr)}).`, warnings };
+  }
+  warnings.push(...timeWarnings(ov.arriveAt ? arr : null, ov.leaveAt ? lv : null, s).filter((w) => !w.startsWith('Odchod musí')));
+  if (fixedHours && ov.arriveAt && ov.leaveAt) warnings.push('Jsou zadané pevné hodiny i oba časy – použijí se pevné hodiny.');
+  return { error: null, warnings };
+}
+
+/** Je výjimka prázdná (nic nemění)? Takovou je lepší smazat. */
+export function isEmptyOverride(ov) {
+  return !ov.absenceType && !ov.arriveAt && !ov.leaveAt && (ov.workedHours == null || ov.workedHours === '')
+    && !ov.clearFixed && !(ov.note ?? '').trim();
+}
+
+function addDaysStr(dateStr, delta) {
+  const { y, m, d } = parseDate(dateStr);
+  const dt = new Date(Date.UTC(y, m - 1, d + delta));
+  return toDateString(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+}
+
+/**
+ * Hromadné zrušení pevných časů z rozvrhu v rozsahu dat (jen dnešní a budoucí
+ * pracovní dny, které v rozvrhu daný pevný čas mají).
+ * Vrací [{date, before, after}] – before umožní akci jedním krokem vrátit.
+ */
+export function bulkClearFixed({ from, to, what, today, settings, overrides = [] }) {
+  if (!parseDate(from) || !parseDate(to) || !CLEAR_VALUES.includes(what)) return [];
+  const s = normalizeSettings(settings);
+  const ovMap = new Map(overrides.map((o) => [o.date, o]));
+  const ops = [];
+  let date = from < today ? today : from;
+  for (let i = 0; date <= to && i < 400; i++, date = addDaysStr(date, 1)) {
+    if (!isWorkday(date)) continue;
+    const sched = scheduledDay(date, s);
+    const relevant = mergeClearFixed(clearsArrival(what) && sched.arriveAt ? 'arrival' : null, clearsLeave(what) && sched.leaveAt ? 'leave' : null);
+    if (!relevant) continue;
+    const before = ovMap.get(date) ?? null;
+    const clearFixed = mergeClearFixed(before?.clearFixed, relevant);
+    if (before && before.clearFixed === clearFixed) continue;
+    ops.push({ date, before, after: { ...(before ?? {}), date, clearFixed } });
+  }
+  return ops;
+}
+
 /**
  * Spočítá plán měsíce.
  *
@@ -328,9 +502,7 @@ function absenceOf(source, fund) {
 export function buildMonthPlan({ year, month, today, settings, records, overrides = [] }) {
   const s = normalizeSettings(settings);
   const rules = rulesFromSettings(s);
-  const fundDay = rules.DAILY_FUND_MIN;
   const maxWorked = hoursToMinutes(s.maxWorkedHoursPerDay);
-  const anchor = parseTime(s.anchorTime);
   const earliest = parseTime(s.earliestArrival);
   const latest = Math.min(1439, parseTime(s.latestDeparture));
   const coreStart = parseTime(s.coreStart);
@@ -346,6 +518,9 @@ export function buildMonthPlan({ year, month, today, settings, records, override
     const workday = isWorkday(date);
     const res = rec ? safeDayResult(rec, rules) : null;
     const { week } = isoWeek(date);
+    // pravidla platná pro tento den (verze s datem platnosti)
+    const dayRules = rulesForDate(rules, date);
+    const fundDay = dayRules.DAILY_FUND_MIN;
     const day = {
       date,
       week,
@@ -362,8 +537,10 @@ export function buildMonthPlan({ year, month, today, settings, records, override
       plannedLeave: null,
       actual: res && (res.complete || res.credited) ? res.credited : null,
       credited: 0,
+      note: ov?.note?.trim() || '',
       warnings: [],
     };
+    Object.defineProperty(day, 'rules', { value: dayRules }); // pro převody, mimo výstup
     days.push(day);
 
     const upcoming = date >= today;
@@ -400,16 +577,14 @@ export function buildMonthPlan({ year, month, today, settings, records, override
     const absMin = absence?.minutes ?? 0;
     day.absence = absMin;
 
-    // Konce dne: skutečný příchod > výjimka > rozvrh > kotva; druhý konec se dopočítá.
-    const sched = scheduledDay(date, s);
-    const actualArr = rec?.arrival ? parseTime(rec.arrival) : null;
-    day.actualArrival = actualArr !== null;
-    let arr = actualArr ?? t(ov?.arriveAt) ?? t(sched.arriveAt);
-    let lv = t(ov?.leaveAt) ?? t(sched.leaveAt);
-    day.explicitArrival = arr !== null && actualArr === null;
-    day.explicitLeave = lv !== null;
-    if (s.anchorMode === 'arrival') arr ??= anchor;
-    else lv ??= anchor;
+    // Konce dne: skutečný příchod > výjimka > rozvrh (nezrušený) > kotva; druhý konec se dopočítá.
+    const ends = dayEnds(date, s, { override: ov, record: rec });
+    const actualArr = ends.actualArrival ? ends.arr : null;
+    const { arr, lv } = ends;
+    day.actualArrival = ends.actualArrival;
+    day.explicitArrival = ends.explicitArrival;
+    day.explicitLeave = ends.explicitLeave;
+    day.clearedFixed = ends.cleared;
 
     const fixedWorked = ov?.workedHours != null && ov.workedHours !== '' ? hoursToMinutes(ov.workedHours) : null;
 
@@ -424,7 +599,7 @@ export function buildMonthPlan({ year, month, today, settings, records, override
       // pracovní blok se o ni zkrátí – není-li zaznamenaný skutečný příchod.
       const workStart = actualArr !== null ? arr : arr + absMin;
       day.kind = 'fixed';
-      day.plannedWorked = workedForStay(Math.max(0, lv - workStart), rules);
+      day.plannedWorked = workedForStay(Math.max(0, lv - workStart), dayRules);
       day.plannedArrivalMin = workStart;
       day.plannedLeaveMin = lv;
     } else {
@@ -434,10 +609,10 @@ export function buildMonthPlan({ year, month, today, settings, records, override
       day.fixedTime = day.flex === 'leave' ? arr : lv;
       const maxStay = day.flex === 'leave' ? latest - arr : lv - Math.max(0, earliest);
       const coreStay = day.flex === 'leave' ? coreEnd - arr : lv - coreStart;
-      const cap = Math.min(maxWorked, workedForStay(Math.max(0, maxStay), rules));
+      const cap = Math.min(maxWorked, workedForStay(Math.max(0, maxStay), dayRules));
       const base = Math.min(Math.max(0, fundDay - absMin), cap);
       day.base = base;
-      day.min = absMin > 0 ? 0 : Math.min(workedForStay(Math.max(0, coreStay), rules), base);
+      day.min = absMin > 0 ? 0 : Math.min(workedForStay(Math.max(0, coreStay), dayRules), base);
       day.max = Math.max(cap, base);
       day.plannedWorked = base;
     }
@@ -479,7 +654,7 @@ export function buildMonthPlan({ year, month, today, settings, records, override
   for (const x of days) {
     if (x.plannedWorked === null || x.kind === 'absence') continue;
     if (x.kind === 'regular' || x.kind === 'override') {
-      const stay = stayForWorked(x.plannedWorked, rules);
+      const stay = stayForWorked(x.plannedWorked, x.rules);
       x.plannedArrivalMin = x.flex === 'leave' ? x.fixedTime : x.fixedTime - stay;
       x.plannedLeaveMin = x.flex === 'leave' ? x.fixedTime + stay : x.fixedTime;
     }
@@ -539,7 +714,7 @@ export function buildMonthPlan({ year, month, today, settings, records, override
  */
 export function fillRecord(date, record, settings, override = null) {
   const s = normalizeSettings(settings);
-  const rules = rulesFromSettings(s);
+  const rules = rulesForDate(rulesFromSettings(s), date);
   const fundDay = rules.DAILY_FUND_MIN;
   const res = record ? safeDayResult(record, rules) : null;
   if (res?.complete || !isWorkday(date)) return null;
@@ -551,16 +726,16 @@ export function fillRecord(date, record, settings, override = null) {
   }
   const absMin = absence?.minutes ?? 0;
   const stay = stayForWorked(fundDay - absMin, rules);
-  const sched = scheduledDay(date, s);
+  const ends = dayEnds(date, s, { override, record });
   let arrival;
   let departure;
-  if (record?.arrival || s.anchorMode === 'arrival') {
+  if (ends.actualArrival || s.anchorMode === 'arrival' || ends.explicitArrival) {
     // známý příchod (záznam, výjimka, rozvrh nebo kotva) + pobyt
-    arrival = t(record?.arrival) ?? t(override?.arriveAt) ?? t(sched.arriveAt) ?? parseTime(s.anchorTime);
+    arrival = ends.arr ?? parseTime(s.anchorTime);
     departure = arrival + stay;
   } else {
     // kotva odchodu: příchod se dopočítá zpět od odchodu
-    departure = t(override?.leaveAt) ?? t(sched.leaveAt) ?? parseTime(s.anchorTime);
+    departure = ends.lv;
     arrival = departure - stay;
   }
   if (arrival < 0 || departure > 1439) return null;
