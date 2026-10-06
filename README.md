@@ -8,6 +8,7 @@ HTML + Vanilla JS (ES moduly), Firebase (Authentication + Firestore), TailwindCS
 
 - **Příchod / Odchod** jedním klepnutím. Čas se předvyplní aktuálním, lze ho změnit a zapisovat i zpětně pro libovolné datum.
 - **Pravidla:** fond 8 h/den. Za každých celých 6 h pobytu se odečte 30 min přestávky (`floor(pobyt / 6 h) * 30 min`).
+  Fond i přestávku si každý uživatel může změnit v nastavení.
 - **Typy dnů:** Pracovní, Dovolená, Nemoc, Lékař (započtou 8 h, netvoří přesčas) a Náhradní volno (započte 8 h a odečte 8 h z banky).
 - **Banka přesčasů:** součet denních přesčasů (mohou být i záporné) minus čerpání. Výběr náhradního volna po hodinách, nad zůstatek nelze vybrat.
 - **Měsíční přehled:** fond (pracovní dny × 8 h, bez víkendů a **státních svátků ČR**), odpracováno, přesčas, čerpání a úprava jednotlivých dnů.
@@ -133,6 +134,7 @@ každý měsíc se vyrovnává na nulu samostatně.
 | `coreStart`, `coreEnd` | 09:00, 14:00 | pevná pracovní doba (jen pro varování a minimum zkrácení) |
 | `dailyFundHours` | 8 | denní fond, platí pro **celou aplikaci** (přesčasy, banka, měsíční fond) |
 | `maxWorkedHoursPerDay` | 10 | strop odpracovaných hodin běžného dne |
+| `breakAfterHours`, `breakLengthMinutes` | 6, 30 | polední přestávka: za každých celých `breakAfterHours` pobytu se odečte `breakLengthMinutes` (0 = bez přestávky). Platí pro **celou aplikaci**. |
 | `parityFlip` | false | prohodí lichý a sudý týden |
 | `schedule.odd/even.{1–5}` | prázdné | **pevný** čas odchodu pro daný den lichého/sudého ISO týdne, prázdné = běžný den |
 
@@ -150,7 +152,8 @@ Uložit ho ale jde, je to jen upozornění.
    Zbylé dávky jdou na dny rozprostřené přes celý měsíc, zbytek pod 15 min dostane jeden den uprostřed, takže měsíc vyjde přesně na nulu.
    Strop `maxWorkedHoursPerDay` přeleje hodiny na ostatní dny. Když to nestačí, plán ukáže, kolik hodin chybí.
 5. Přebytek běžné dny rovnoměrně zkrátí, nejvýš na odchod v `coreEnd`. Zbytek plán ohlásí jako „přebývá“.
-6. Hodiny se převádějí na odchod nejmenším pobytem, který dá požadované hodiny. Kvůli přestávce dá například 6:00 h práce pobyt 6:30 h.
+6. Hodiny se převádějí na odchod nejmenším pobytem, který dá požadované hodiny. Kvůli přestávce dá například 6:00 h práce pobyt 6:30 h
+   (při výchozím pravidle přestávky).
 7. Parita se určuje podle ISO týdne každého dne zvlášť, i když týden přesahuje hranici měsíců.
 
 **Výjimky dnů:** klepnutím na dnešní nebo budoucí den v plánu nastavíte nepřítomnost (celý den nebo hodiny), pevný odchod nebo pevné
@@ -181,8 +184,9 @@ Alternativně v prohlížeči: spusťte lokální server a otevřete <http://loc
 
 ## Úprava pravidel
 
-Interval a délka přestávky (a výchozí denní fond) jsou na jednom místě, v konstantě `RULES` v [`js/calc.js`](js/calc.js).
-Denní fond si každý uživatel může změnit v Nastavení plánu.
+Výchozí interval a délka přestávky i výchozí denní fond jsou na jednom místě, v konstantě `RULES` v [`js/calc.js`](js/calc.js).
+Každý uživatel si je může přepsat v **Plán → Nastavení pracovní doby a plánu**. Změna se promítne i do minulých měsíců
+(přesčasy a banka se vždy přepočítávají ze záznamů).
 Státní svátky ČR (včetně pohyblivého Velkého pátku a Velikonočního pondělí) počítá funkce `czechHolidays`.
 
 ## Ikony

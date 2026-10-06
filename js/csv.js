@@ -20,7 +20,7 @@ function row(values) {
 }
 
 /** Text CSV (včetně BOM) pro zvolený měsíc. */
-export function buildMonthCsv(records, withdrawals, y, m, dailyFund = undefined) {
+export function buildMonthCsv(records, withdrawals, y, m, rules = undefined) {
   const byDate = new Map(records.map((r) => [r.date, r]));
   const lines = [];
   lines.push(row([
@@ -34,7 +34,7 @@ export function buildMonthCsv(records, withdrawals, y, m, dailyFund = undefined)
     if (!r) continue;
     let res;
     try {
-      res = dayResult(r, dailyFund);
+      res = dayResult(r, rules);
     } catch {
       res = null;
     }
@@ -67,7 +67,7 @@ export function buildMonthCsv(records, withdrawals, y, m, dailyFund = undefined)
     }
   }
 
-  const s = monthSummary(records, y, m, withdrawals, dailyFund);
+  const s = monthSummary(records, y, m, withdrawals, rules);
   lines.push('');
   lines.push(row([`Souhrn ${MONTH_LABELS[m - 1]} ${y}`]));
   lines.push(row(['Pracovní dny', s.workdays]));

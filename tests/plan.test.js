@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_SETTINGS, normalizeSettings, settingsWarnings, leaveWarning, arrivalWarning, isoWeek,
   weekParity, scheduledLeave, workedForStay, stayForWorked, buildMonthPlan, fillRecord, fillCandidates,
+  rulesFromSettings,
 } from '../js/plan.js';
 import { dayResult, monthFund } from '../js/calc.js';
 
@@ -266,4 +267,29 @@ test('nastavitelný denní fond se promítne do fondu měsíce i přesčasu', ()
   const p = plan({ dailyFundHours: 7.5 });
   assert.equal(total(p), 20 * 7.5 * H);
   assert.equal(day(p, '2027-02-01').plannedLeave, '14:00');
+});
+
+test('vlastní pravidlo přestávky v plánu a doplnění', () => {
+  // výchozí
+  assert.deepEqual(rulesFromSettings(settings()), { DAILY_FUND_MIN: 480, BREAK_INTERVAL_MIN: 360, BREAK_MIN: 30 });
+  // 45 min po každých 6 h → běžný den 8:45 pobytu
+  const s45 = settings({ breakLengthMinutes: 45 });
+  const r45 = rulesFromSettings(s45);
+  assert.equal(stayForWorked(8 * H, r45), 8 * H + 45);
+  assert.equal(workedForStay(6 * H, r45), 5.25 * H);
+  const p = plan({ breakLengthMinutes: 45 });
+  assert.equal(day(p, '2027-02-01').plannedLeave, '14:45');
+  assert.equal(total(p), FEB_FUND);
+  assert.equal(fillRecord('2027-02-01', undefined, s45).departure, '14:45');
+  // bez přestávky → 8 h pobytu
+  assert.equal(day(plan({ breakLengthMinutes: 0 }), '2027-02-01').plannedLeave, '14:00');
+  // přestávka po 4,5 h → 8 h práce = 8:30 pobytu (1 přestávka), 9 h práce = 10:00 pobytu (2 přestávky)
+  const r45h = rulesFromSettings(settings({ breakAfterHours: 4.5 }));
+  assert.equal(stayForWorked(8 * H, r45h), 8.5 * H);
+  assert.equal(stayForWorked(9 * H, r45h), 10 * H);
+  // neplatné pravidlo (přestávka ≥ interval) → výchozí hodnoty
+  const bad = normalizeSettings({ breakAfterHours: 0.5, breakLengthMinutes: 30 });
+  assert.equal(bad.breakAfterHours, 6);
+  assert.equal(bad.breakLengthMinutes, 30);
+  assert.equal(normalizeSettings({ breakLengthMinutes: 12.5 }).breakLengthMinutes, 30);
 });

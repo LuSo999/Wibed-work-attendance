@@ -6,7 +6,7 @@ import {
   RULES, DAY_TYPES, parseTime, formatMinutes, parseDate, breakMinutes, stayMinutes,
   workedMinutes, dayResult, isWorkday, holidayName, easterSunday, czechHolidays,
   workdaysInMonth, monthFund, monthSummary, bankBalance, validateWithdrawal, validateDay,
-  hoursToMinutes, formatHoursDecimal,
+  hoursToMinutes, formatHoursDecimal, toRules, describeBreakRule,
 } from '../js/calc.js';
 import { buildMonthCsv } from '../js/csv.js';
 
@@ -191,4 +191,24 @@ test('CSV: BOM, středník, CRLF, escapování', () => {
   assert.ok(csv.includes('"Porada; ""důležitá"""'));
   assert.ok(!csv.includes('28.02.2025'));
   assert.ok(csv.includes('Fond;168:00'));
+});
+
+test('nastavitelné pravidlo přestávky (výchozí beze změny)', () => {
+  assert.equal(toRules().BREAK_MIN, 30);
+  assert.equal(toRules(450).DAILY_FUND_MIN, 450);          // číslo = denní fond (zpětná kompatibilita)
+  assert.equal(toRules(450).BREAK_INTERVAL_MIN, 360);
+  const r = { BREAK_INTERVAL_MIN: 4.5 * H, BREAK_MIN: 45 };
+  assert.equal(breakMinutes(4.5 * H - 1, r), 0);
+  assert.equal(breakMinutes(4.5 * H, r), 45);
+  assert.equal(breakMinutes(9 * H, r), 90);
+  assert.equal(workedMinutes('08:00', '17:00', r), 7.5 * H);
+  const res = dayResult({ date: '2025-03-03', type: 'work', arrival: '07:00', departure: '16:00' }, r);
+  assert.equal(res.break, 90);
+  assert.equal(res.overtime, -30);
+  // bez přestávky
+  assert.equal(dayResult({ date: '2025-03-03', type: 'work', arrival: '07:00', departure: '15:00' }, { BREAK_MIN: 0 }).overtime, 0);
+  assert.match(describeBreakRule(), /každých celých 6:00 h pobytu se odečte 30 min/);
+  assert.match(describeBreakRule({ BREAK_MIN: 0 }), /neodečítá/);
+  // bez pravidel = původní výsledky
+  assert.equal(bankBalance(records, withdrawals), bankBalance(records, withdrawals, {}));
 });

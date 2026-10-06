@@ -16,6 +16,24 @@ export const RULES = Object.freeze({
   BREAK_MIN: 30,
 });
 
+/**
+ * Pravidla uživatele: RULES s případně přepsanými hodnotami.
+ * Přijímá objekt {DAILY_FUND_MIN?, BREAK_INTERVAL_MIN?, BREAK_MIN?}, samotné číslo
+ * (= denní fond v minutách, zpětná kompatibilita) nebo nic (= výchozí RULES).
+ */
+export function toRules(rules) {
+  if (rules === undefined || rules === null) return RULES;
+  if (typeof rules === 'number') return { ...RULES, DAILY_FUND_MIN: rules };
+  return { ...RULES, ...rules };
+}
+
+/** Popis pravidla přestávky pro uživatele, např. „Za každých celých 6:00 h pobytu se odečte 30 min přestávky.“ */
+export function describeBreakRule(rules) {
+  const r = toRules(rules);
+  if (!r.BREAK_MIN) return 'Přestávka se neodečítá – odpracováno = celý pobyt.';
+  return `Za každých celých ${formatMinutes(r.BREAK_INTERVAL_MIN)} h pobytu se odečte ${r.BREAK_MIN} min přestávky.`;
+}
+
 /** Typy dnů. */
 export const DAY_TYPES = Object.freeze({
   WORK: 'work',
@@ -183,20 +201,21 @@ export function isWorkday(dateStr) {
 
 /**
  * Fond konkrétního dne (denní fond v pracovní den, jinak 0).
- * @param {number} [dailyFund] denní fond v minutách (nastavení uživatele, výchozí RULES)
+ * @param {object|number} [rules] pravidla uživatele (viz toRules), výchozí RULES
  */
-export function dayFund(dateStr, dailyFund = RULES.DAILY_FUND_MIN) {
-  return isWorkday(dateStr) ? dailyFund : 0;
+export function dayFund(dateStr, rules) {
+  return isWorkday(dateStr) ? toRules(rules).DAILY_FUND_MIN : 0;
 }
 
 // ---------------------------------------------------------------------------
 // Denní výpočty
 // ---------------------------------------------------------------------------
 
-/** Povinná přestávka: floor(pobyt / 6 h) * 30 min. */
-export function breakMinutes(stayMinutes) {
-  if (!(stayMinutes > 0)) return 0;
-  return Math.floor(stayMinutes / RULES.BREAK_INTERVAL_MIN) * RULES.BREAK_MIN;
+/** Povinná přestávka: floor(pobyt / interval) * délka (výchozí 6 h a 30 min). */
+export function breakMinutes(stayMinutes, rules) {
+  const r = toRules(rules);
+  if (!(stayMinutes > 0) || !(r.BREAK_INTERVAL_MIN > 0)) return 0;
+  return Math.floor(stayMinutes / r.BREAK_INTERVAL_MIN) * r.BREAK_MIN;
 }
 
 /**
@@ -212,9 +231,9 @@ export function stayMinutes(arrival, departure) {
 }
 
 /** Odpracováno = pobyt − přestávka (null, pokud den není uzavřený). */
-export function workedMinutes(arrival, departure) {
+export function workedMinutes(arrival, departure, rules) {
   const stay = stayMinutes(arrival, departure);
-  return stay === null ? null : stay - breakMinutes(stay);
+  return stay === null ? null : stay - breakMinutes(stay, rules);
 }
 
 /** Je typ dne nepřítomnost (vše kromě pracovního dne)? */
@@ -240,7 +259,7 @@ export function partialAbsenceMinutes(record, fund) {
  * U náhradního volna se hodiny nepřítomnosti navíc čerpají z banky.
  *
  * @param {{date: string, type?: string, arrival?: string|null, departure?: string|null, absenceHours?: number|null}} record
- * @param {number} [dailyFund] denní fond v minutách (výchozí RULES)
+ * @param {object|number} [rules] pravidla uživatele (viz toRules), výchozí RULES
  * @returns {{
  *   fund: number,       // fond dne (0 o víkendu/svátku)
  *   stay: number|null,  // pobyt (jen pokud jsou zadané časy)
@@ -254,8 +273,8 @@ export function partialAbsenceMinutes(record, fund) {
  *   partial: boolean,   // částečná nepřítomnost
  * }}
  */
-export function dayResult(record, dailyFund = RULES.DAILY_FUND_MIN) {
-  const fund = dayFund(record.date, dailyFund);
+export function dayResult(record, rules) {
+  const fund = dayFund(record.date, rules);
   const type = record.type ?? DAY_TYPES.WORK;
   const empty = {
     fund, stay: null, break: 0, worked: 0, absence: 0, credited: 0, overtime: 0, bankDelta: 0, complete: true, partial: false,
@@ -273,7 +292,7 @@ export function dayResult(record, dailyFund = RULES.DAILY_FUND_MIN) {
   if (stay === null) {
     return { ...empty, absence, credited: absence, bankDelta: -drawn, complete: false, partial: partialAbsence !== null };
   }
-  const brk = breakMinutes(stay);
+  const brk = breakMinutes(stay, rules);
   const worked = stay - brk;
   const credited = worked + absence;
   const overtime = credited - fund;
@@ -283,12 +302,12 @@ export function dayResult(record, dailyFund = RULES.DAILY_FUND_MIN) {
 }
 
 /** Bezpečná varianta dayResult – neplatný záznam se počítá jako prázdný. */
-export function safeDayResult(record, dailyFund = RULES.DAILY_FUND_MIN) {
+export function safeDayResult(record, rules) {
   try {
-    return dayResult(record, dailyFund);
+    return dayResult(record, rules);
   } catch {
     return {
-      fund: dayFund(record.date, dailyFund), stay: null, break: 0, worked: 0, absence: 0, credited: 0, overtime: 0, bankDelta: 0, complete: false, partial: false,
+      fund: dayFund(record.date, rules), stay: null, break: 0, worked: 0, absence: 0, credited: 0, overtime: 0, bankDelta: 0, complete: false, partial: false,
     };
   }
 }
@@ -307,17 +326,17 @@ export function workdaysInMonth(y, m) {
 }
 
 /** Měsíční fond = pracovní dny * denní fond. */
-export function monthFund(y, m, dailyFund = RULES.DAILY_FUND_MIN) {
-  return workdaysInMonth(y, m) * dailyFund;
+export function monthFund(y, m, rules) {
+  return workdaysInMonth(y, m) * toRules(rules).DAILY_FUND_MIN;
 }
 
 /**
  * Souhrn měsíce.
  * @param {Array} records   záznamy docházky (libovolné; filtrují se podle data)
  * @param {Array} withdrawals výběry z banky {date, minutes}
- * @param {number} [dailyFund] denní fond v minutách
+ * @param {object|number} [rules] pravidla uživatele (viz toRules)
  */
-export function monthSummary(records, y, m, withdrawals = [], dailyFund = RULES.DAILY_FUND_MIN) {
+export function monthSummary(records, y, m, withdrawals = [], rules = undefined) {
   const prefix = `${monthKey(y, m)}-`;
   let credited = 0;
   let worked = 0;
@@ -325,7 +344,7 @@ export function monthSummary(records, y, m, withdrawals = [], dailyFund = RULES.
   let compUsed = 0;
   for (const r of records) {
     if (!r.date?.startsWith(prefix)) continue;
-    const res = safeDayResult(r, dailyFund);
+    const res = safeDayResult(r, rules);
     credited += res.credited;
     worked += res.worked;
     overtime += res.overtime;
@@ -334,7 +353,7 @@ export function monthSummary(records, y, m, withdrawals = [], dailyFund = RULES.
   const withdrawn = withdrawals
     .filter((w) => w.date?.startsWith(prefix))
     .reduce((sum, w) => sum + (w.minutes || 0), 0);
-  const fund = monthFund(y, m, dailyFund);
+  const fund = monthFund(y, m, rules);
   return {
     workdays: workdaysInMonth(y, m),
     fund,
@@ -349,8 +368,8 @@ export function monthSummary(records, y, m, withdrawals = [], dailyFund = RULES.
 }
 
 /** Celkový zůstatek banky přesčasů v minutách. */
-export function bankBalance(records, withdrawals = [], dailyFund = RULES.DAILY_FUND_MIN) {
-  const earned = records.reduce((sum, r) => sum + safeDayResult(r, dailyFund).bankDelta, 0);
+export function bankBalance(records, withdrawals = [], rules = undefined) {
+  const earned = records.reduce((sum, r) => sum + safeDayResult(r, rules).bankDelta, 0);
   const withdrawn = withdrawals.reduce((sum, w) => sum + (w.minutes || 0), 0);
   return earned - withdrawn;
 }
@@ -370,13 +389,13 @@ export function validateWithdrawal(minutes, balance) {
  * Kontrola záznamu dne před uložením. Vrací null nebo text chyby.
  * @param {object} record     nový záznam
  * @param {number} balanceWithoutDay zůstatek banky bez vlivu tohoto dne
- * @param {number} [dailyFund] denní fond v minutách
+ * @param {object|number} [rules] pravidla uživatele (viz toRules)
  */
-export function validateDay(record, balanceWithoutDay = Infinity, dailyFund = RULES.DAILY_FUND_MIN) {
+export function validateDay(record, balanceWithoutDay = Infinity, rules = undefined) {
   if (!parseDate(record.date)) return 'Neplatné datum.';
   const type = record.type ?? DAY_TYPES.WORK;
   if (!Object.values(DAY_TYPES).includes(type)) return 'Neznámý typ dne.';
-  const fund = dayFund(record.date, dailyFund);
+  const fund = dayFund(record.date, rules);
   if (isAbsenceType(type) && record.absenceHours != null && record.absenceHours !== '') {
     const h = Number(record.absenceHours);
     if (!Number.isFinite(h) || h <= 0) return 'Počet hodin nepřítomnosti musí být kladné číslo.';

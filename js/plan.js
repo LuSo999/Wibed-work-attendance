@@ -28,6 +28,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   coreEnd: '14:00',
   dailyFundHours: 8,
   maxWorkedHoursPerDay: 10,
+  /** Přestávka: za každých celých breakAfterHours pobytu se odečte breakLengthMinutes. */
+  breakAfterHours: 6,
+  breakLengthMinutes: 30,
   parityFlip: false,
   schedule: {
     odd: { 1: '', 2: '', 3: '', 4: '', 5: '' },
@@ -48,12 +51,21 @@ export function normalizeSettings(raw = {}) {
       schedule[week][day] = parseTime(v) === null ? '' : v;
     }
   }
+  // Přestávka musí být kratší než interval, jinak by delší pobyt nedal víc práce.
+  let breakAfterHours = validHours(raw.breakAfterHours, d.breakAfterHours);
+  let breakLengthMinutes = Number(raw.breakLengthMinutes ?? d.breakLengthMinutes);
+  if (!Number.isInteger(breakLengthMinutes) || breakLengthMinutes < 0 || breakLengthMinutes >= hoursToMinutes(breakAfterHours)) {
+    breakAfterHours = d.breakAfterHours;
+    breakLengthMinutes = d.breakLengthMinutes;
+  }
   return {
     startTime: validTime(raw.startTime, d.startTime),
     coreStart: validTime(raw.coreStart, d.coreStart),
     coreEnd: validTime(raw.coreEnd, d.coreEnd),
     dailyFundHours: validHours(raw.dailyFundHours, d.dailyFundHours),
     maxWorkedHoursPerDay: validHours(raw.maxWorkedHoursPerDay, d.maxWorkedHoursPerDay),
+    breakAfterHours,
+    breakLengthMinutes,
     parityFlip: Boolean(raw.parityFlip),
     schedule,
   };
@@ -62,6 +74,15 @@ export function normalizeSettings(raw = {}) {
 /** Denní fond v minutách z nastavení. */
 export function dailyFundMinutes(settings) {
   return hoursToMinutes(settings.dailyFundHours);
+}
+
+/** Pravidla pro calc.js (fond a přestávka) z nastavení uživatele. */
+export function rulesFromSettings(settings) {
+  return {
+    DAILY_FUND_MIN: dailyFundMinutes(settings),
+    BREAK_INTERVAL_MIN: hoursToMinutes(settings.breakAfterHours),
+    BREAK_MIN: settings.breakLengthMinutes,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -135,8 +156,8 @@ export function scheduledLeave(dateStr, settings) {
 // ---------------------------------------------------------------------------
 
 /** Odpracováno z pobytu (pobyt − přestávka). */
-export function workedForStay(stay) {
-  return stay > 0 ? stay - breakMinutes(stay) : 0;
+export function workedForStay(stay, rules) {
+  return stay > 0 ? stay - breakMinutes(stay, rules) : 0;
 }
 
 /**
@@ -144,10 +165,11 @@ export function workedForStay(stay) {
  * Převod je kvůli přestávce nemonotónní (6:00 pobytu = 5:30 práce),
  * proto se hledá nejmenší vyhovující pobyt.
  */
-export function stayForWorked(worked) {
+export function stayForWorked(worked, rules) {
   if (!(worked > 0)) return 0;
   let stay = worked;
-  while (workedForStay(stay) < worked) stay++;
+  // pojistka: při přestávce kratší než interval se cíl vždy najde do dvojnásobku
+  while (workedForStay(stay, rules) < worked && stay < worked * 2 + 1440) stay++;
   return stay;
 }
 
@@ -220,7 +242,8 @@ function absenceOf(source, fund) {
  */
 export function buildMonthPlan({ year, month, today, settings, records, overrides = [] }) {
   const s = normalizeSettings(settings);
-  const fundDay = dailyFundMinutes(s);
+  const rules = rulesFromSettings(s);
+  const fundDay = rules.DAILY_FUND_MIN;
   const maxWorked = hoursToMinutes(s.maxWorkedHoursPerDay);
   const start = parseTime(s.startTime);
   const coreEnd = parseTime(s.coreEnd);
@@ -233,7 +256,7 @@ export function buildMonthPlan({ year, month, today, settings, records, override
     const rec = recMap.get(date);
     const ov = ovMap.get(date) ?? null;
     const workday = isWorkday(date);
-    const res = rec ? safeDayResult(rec, fundDay) : null;
+    const res = rec ? safeDayResult(rec, rules) : null;
     const { week } = isoWeek(date);
     const day = {
       date,
@@ -308,17 +331,17 @@ export function buildMonthPlan({ year, month, today, settings, records, override
       day.arrival = toTimeString(Math.min(workStart, 1439));
       day.kind = 'fixed';
       day.fixedLeave = leaveAt;
-      day.plannedWorked = workedForStay(Math.max(0, parseTime(leaveAt) - workStart));
+      day.plannedWorked = workedForStay(Math.max(0, parseTime(leaveAt) - workStart), rules);
       day.plannedLeave = leaveAt;
       const w = leaveWarning(leaveAt, s);
       if (w) day.warnings.push(`Odchod ${leaveAt} je před koncem pevné pracovní doby (${s.coreEnd}). ${w}`);
       if (parseTime(leaveAt) <= workStart) day.warnings.push('Pevný odchod je dříve než příchod.');
     } else {
       day.kind = 'regular';
-      const latestWorked = workedForStay(1439 - arrival); // odchod nejpozději 23:59
+      const latestWorked = workedForStay(1439 - arrival, rules); // odchod nejpozději 23:59
       const cap = Math.min(maxWorked, latestWorked);
       const base = Math.min(Math.max(0, fundDay - absMin), cap);
-      const fromCore = workedForStay(Math.max(0, coreEnd - arrival));
+      const fromCore = workedForStay(Math.max(0, coreEnd - arrival), rules);
       day.base = base;
       day.min = absMin > 0 ? 0 : Math.min(fromCore, base);
       day.max = Math.max(cap, base);
@@ -327,7 +350,7 @@ export function buildMonthPlan({ year, month, today, settings, records, override
   }
 
   // Deficit = fond − (skutečnost + pevné dny + základy běžných dnů)
-  const fund = monthFund(year, month, fundDay);
+  const fund = monthFund(year, month, rules);
   const regular = days.filter((x) => x.kind === 'regular');
   const totalCredited = () => days.reduce((sum, x) => sum + (x.plannedWorked !== null && x.kind !== 'absence' ? x.plannedWorked + x.absence : x.credited), 0);
   const deficit = fund - totalCredited();
@@ -360,7 +383,7 @@ export function buildMonthPlan({ year, month, today, settings, records, override
 
   for (const x of days) {
     if (x.kind === 'regular' || (x.kind === 'override' && x.plannedLeave === null && x.plannedWorked !== null)) {
-      const leave = parseTime(x.arrival) + stayForWorked(x.plannedWorked);
+      const leave = parseTime(x.arrival) + stayForWorked(x.plannedWorked, rules);
       x.plannedLeave = leave <= 1439 ? toTimeString(leave) : null;
       if (leave > 1439) x.warnings.push('Plánovaný odchod by byl po půlnoci.');
       if (x.kind === 'regular' && x.plannedLeave && parseTime(x.plannedLeave) < coreEnd && x.absence === 0) {
@@ -413,8 +436,9 @@ export function buildMonthPlan({ year, month, today, settings, records, override
  */
 export function fillRecord(date, record, settings, override = null) {
   const s = normalizeSettings(settings);
-  const fundDay = dailyFundMinutes(s);
-  const res = record ? safeDayResult(record, fundDay) : null;
+  const rules = rulesFromSettings(s);
+  const fundDay = rules.DAILY_FUND_MIN;
+  const res = record ? safeDayResult(record, rules) : null;
   if (res?.complete || !isWorkday(date)) return null;
 
   const absence = absenceOf(record, fundDay) ?? absenceOf(override, fundDay);
@@ -424,7 +448,7 @@ export function fillRecord(date, record, settings, override = null) {
   }
   const absMin = absence?.minutes ?? 0;
   const arrival = record?.arrival ?? s.startTime;
-  const departure = parseTime(arrival) + stayForWorked(fundDay - absMin);
+  const departure = parseTime(arrival) + stayForWorked(fundDay - absMin, rules);
   if (departure > 1439) return null;
   return {
     date,

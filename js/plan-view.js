@@ -1,11 +1,12 @@
 // UI záložky „Plán“: rozvrh lichého/sudého týdne, nastavení, plán měsíce,
 // výjimky dnů a hromadné doplnění docházky. Výpočty dělá čistý modul plan.js.
 import {
-  DAY_TYPES, DAY_TYPE_LABELS, MONTH_LABELS, formatMinutes, parseTime, weekdayLabel,
+  DAY_TYPES, DAY_TYPE_LABELS, MONTH_LABELS, formatMinutes, parseTime, weekdayLabel, describeBreakRule,
+  hoursToMinutes, toTimeString,
 } from './calc.js';
 import {
   WEEKDAY_NAMES, PARITY_LABELS, CORE_WARNING, buildMonthPlan, fillCandidates, isoWeek, weekParity,
-  normalizeSettings, settingsWarnings, leaveWarning, workedForStay,
+  normalizeSettings, settingsWarnings, leaveWarning, workedForStay, stayForWorked, rulesFromSettings,
 } from './plan.js';
 import { enhanceTimeInputs } from './time24.js';
 import {
@@ -87,7 +88,7 @@ function renderWeeks(settings, avgRegular) {
       const leaveAt = settings.schedule[week][day];
       const hoursEl = root.querySelector(`[data-hours="${week}-${day}"]`);
       if (leaveAt) {
-        const worked = workedForStay(Math.max(0, parseTime(leaveAt) - parseTime(settings.startTime)));
+        const worked = workedForStay(Math.max(0, parseTime(leaveAt) - parseTime(settings.startTime)), rulesFromSettings(settings));
         hoursEl.innerHTML = `<b>${h(worked)}</b>`;
         hoursEl.title = `Od ${settings.startTime} do ${leaveAt} po odečtení přestávky`;
       } else {
@@ -116,11 +117,24 @@ function onScheduleChange(e) {
 // ---------------------------------------------------------------------------
 // Nastavení
 // ---------------------------------------------------------------------------
+const SETTINGS_FIELDS = ['startTime', 'coreStart', 'coreEnd', 'dailyFundHours', 'maxWorkedHoursPerDay', 'breakAfterHours', 'breakLengthMinutes'];
+const NUMBER_FIELDS = ['dailyFundHours', 'maxWorkedHoursPerDay', 'breakAfterHours', 'breakLengthMinutes'];
+
+/** Vysvětlení pravidla přestávky s příkladem pro denní fond. */
+function breakRuleText(settings) {
+  const rules = rulesFromSettings(settings);
+  const stay = stayForWorked(rules.DAILY_FUND_MIN, rules);
+  return `${describeBreakRule(rules)} Na denní fond ${formatMinutes(rules.DAILY_FUND_MIN)} h je tedy potřeba pobyt ${formatMinutes(stay)} h `
+    + `(příchod ${settings.startTime} → odchod ${toTimeString(Math.min(1439, parseTime(settings.startTime) + stay))}). `
+    + 'Pravidlo platí pro výpočet odpracovaných hodin, přesčasů i plánu.';
+}
+
 function renderSettingsForm(settings) {
   const f = $('#form-plan-settings');
-  for (const name of ['startTime', 'coreStart', 'coreEnd', 'dailyFundHours', 'maxWorkedHoursPerDay']) {
+  for (const name of SETTINGS_FIELDS) {
     if (document.activeElement !== f[name]) f[name].value = settings[name];
   }
+  $('#break-rule-text').textContent = breakRuleText(settings);
   const warnings = settingsWarnings(settings).filter((w) => w.field !== 'schedule');
   const el = $('#plan-settings-warnings');
   el.innerHTML = warnings.map((w) => `<li>⚠ ${escapeHtml(w.message)}</li>`).join('');
@@ -133,7 +147,13 @@ function onSettingsChange(e) {
   const { settings } = ctx.getState();
   const raw = { ...settings };
   for (const name of ['startTime', 'coreStart', 'coreEnd']) raw[name] = f[name].value;
-  for (const name of ['dailyFundHours', 'maxWorkedHoursPerDay']) raw[name] = f[name].valueAsNumber;
+  for (const name of NUMBER_FIELDS) raw[name] = f[name].valueAsNumber;
+  const breakErr = !(raw.breakAfterHours > 0 && raw.breakAfterHours <= 24) ? 'Interval přestávky musí být 0,25–24 h.'
+    : !(Number.isInteger(raw.breakLengthMinutes) && raw.breakLengthMinutes >= 0) ? 'Délka přestávky musí být celý počet minut (0 = bez přestávky).'
+      : raw.breakLengthMinutes >= hoursToMinutes(raw.breakAfterHours) ? 'Přestávka musí být kratší než interval, po kterém se odečítá.'
+        : null;
+  setError($('#break-rule-error'), breakErr);
+  if (breakErr) return;
   const next = normalizeSettings(raw);
   ctx.saveSettings(next);
   const warns = settingsWarnings(next).filter((w) => w.field !== 'schedule');

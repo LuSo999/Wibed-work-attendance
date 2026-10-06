@@ -9,7 +9,7 @@ import {
 import { buildMonthCsv, downloadCsv } from './csv.js';
 import { enhanceTimeInputs } from './time24.js';
 import {
-  normalizeSettings, dailyFundMinutes, buildMonthPlan, fillRecord,
+  normalizeSettings, rulesFromSettings, buildMonthPlan, fillRecord,
 } from './plan.js';
 import {
   initPlanView, renderPlanView, weekBadgeHtml, flipParity,
@@ -37,13 +37,13 @@ let auth; // modul auth.js (načte se dynamicky)
 let store; // modul store.js
 
 const records = () => [...state.records.values()];
-/** Denní fond uživatele v minutách (nastavení plánu, výchozí 8 h). */
-const fund = () => dailyFundMinutes(state.settings);
-const balance = () => bankBalance(records(), state.withdrawals, fund());
+/** Pravidla uživatele – denní fond a přestávka (nastavení plánu, výchozí 8 h a 30 min po 6 h). */
+const rules = () => rulesFromSettings(state.settings);
+const balance = () => bankBalance(records(), state.withdrawals, rules());
 
 function safeResult(record) {
   try {
-    return dayResult(record, fund());
+    return dayResult(record, rules());
   } catch {
     return null;
   }
@@ -154,7 +154,7 @@ function renderBank() {
     el.classList.toggle('text-rose-200', b < 0);
   }
   const t = new Date();
-  const s = monthSummary(records(), t.getFullYear(), t.getMonth() + 1, state.withdrawals, fund());
+  const s = monthSummary(records(), t.getFullYear(), t.getMonth() + 1, state.withdrawals, rules());
   $('#bank-month').textContent = `${signed(s.overtime)} h`;
   $('#bank-fund').textContent = `${formatMinutes(s.fund)} h`;
 }
@@ -213,7 +213,7 @@ function refreshTime() {
 }
 
 function saveRecord(record) {
-  const err = validateDay(record, balanceWithout(record.date), fund());
+  const err = validateDay(record, balanceWithout(record.date), rules());
   if (err) return err;
   // Zápis se díky offline cache Firestore projeví okamžitě; chyba (např. pravidla) se ohlásí později.
   store.saveDay(state.user.uid, record).catch((e) => toast(`Uložení se nezdařilo: ${e.message}`, 'error'));
@@ -275,7 +275,7 @@ function summaryCard(label, value, sub = '', cls = '') {
 function renderMonth() {
   const { y, m } = state.month;
   $('#month-title').textContent = `${MONTH_LABELS[m - 1]} ${y}`;
-  const s = monthSummary(records(), y, m, state.withdrawals, fund());
+  const s = monthSummary(records(), y, m, state.withdrawals, rules());
   $('#month-summary').innerHTML = [
     summaryCard('Fond', `${formatMinutes(s.fund)} h`, `${s.workdays} pracovních dní`),
     summaryCard('Odpracováno', `${formatMinutes(s.credited)} h`, `z toho práce ${formatMinutes(s.worked)} h`),
@@ -341,7 +341,7 @@ function shiftMonth(delta) {
 
 function exportMonth() {
   const { y, m } = state.month;
-  const csv = buildMonthCsv(records(), state.withdrawals, y, m, fund());
+  const csv = buildMonthCsv(records(), state.withdrawals, y, m, rules());
   downloadCsv(csv, `dochazka-${y}-${String(m).padStart(2, '0')}.csv`);
 }
 
@@ -372,11 +372,11 @@ function updateDialog() {
   $('#dlg-day-times').hidden = rec.type !== DAY_TYPES.WORK && !res0?.partial;
   $('#dlg-day-filled').hidden = !dialogFilled;
   $('#dlg-day-fill').hidden = !isWorkday(dialogDate) || dialogDate > todayStr();
-  const err = validateDay(rec, balanceWithout(dialogDate), fund());
+  const err = validateDay(rec, balanceWithout(dialogDate), rules());
   setError($('#dlg-day-error'), err);
   $('#dlg-day-save').disabled = Boolean(err);
   const res = err ? null : res0;
-  let text = `Fond dne ${formatMinutes(dayFund(dialogDate, fund()))} h`;
+  let text = `Fond dne ${formatMinutes(dayFund(dialogDate, rules()))} h`;
   if (res && (rec.type === DAY_TYPES.WORK || res.partial) && res.complete) {
     text = `Pobyt ${formatMinutes(res.stay)} h − přestávka ${formatMinutes(res.break)} h = ${formatMinutes(res.worked)} h`
       + `${res.partial ? ` + ${DAY_TYPE_LABELS[rec.type].toLowerCase()} ${formatMinutes(res.absence)} h` : ''} · přesčas ${signed(res.overtime)} h`;
