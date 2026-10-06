@@ -116,6 +116,7 @@
         <nav class="ml-4 hidden gap-1 md:flex" aria-label="Sekce">
           <button data-tab="overview" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium">Přehled</button>
           <button data-tab="month" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium">Měsíc</button>
+          <button data-tab="plan" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium">Plán</button>
           <button data-tab="bank" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium">Banka</button>
         </nav>
         <div class="ml-auto flex items-center gap-1">
@@ -136,6 +137,7 @@
 
       <!-- ---------- Přehled ---------- -->
       <div id="tab-overview" class="space-y-4">
+        <div id="overview-week" class="flex flex-wrap items-center gap-2"></div>
         <div class="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-5 text-white shadow-lg shadow-indigo-600/20">
           <p class="text-sm font-medium text-indigo-100">Banka přesčasů</p>
           <p id="bank-balance" class="tabular mt-1 text-4xl font-bold tracking-tight">–</p>
@@ -143,6 +145,14 @@
             <span>Tento měsíc: <b id="bank-month" class="tabular text-white">–</b></span>
             <span>Fond měsíce: <b id="bank-fund" class="tabular text-white">–</b></span>
           </div>
+        </div>
+
+        <div id="today-plan" class="flex flex-wrap items-center gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+          <div class="min-w-0 flex-1">
+            <p id="today-plan-title" class="font-semibold"></p>
+            <p id="today-plan-sub" class="text-sm text-slate-500 dark:text-slate-400"></p>
+          </div>
+          <button id="btn-use-plan" type="button" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700">Použít plán</button>
         </div>
 
         <div class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
@@ -210,6 +220,78 @@
         <ul id="month-days" class="divide-y divide-slate-100 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:divide-slate-800 dark:bg-slate-900 dark:ring-slate-800"></ul>
       </div>
 
+      <!-- ---------- Plán ---------- -->
+      <div id="tab-plan" class="space-y-4" hidden>
+        <div id="plan-week" class="flex flex-wrap items-center gap-2"></div>
+
+        <div>
+          <h2 class="mb-2 text-lg font-bold">Rozvrh odchodů</h2>
+          <p class="mb-3 text-sm text-slate-500 dark:text-slate-400">Pevný čas odchodu pro dny lichého a sudého týdne (např. vyzvedávání dítěte). Prázdné = běžný den, který se dopočítá tak, aby měsíc vyšel do fondu.</p>
+          <div id="plan-weeks" class="grid gap-4 md:grid-cols-2"></div>
+        </div>
+
+        <details class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+          <summary class="cursor-pointer px-5 py-4 font-semibold">Nastavení plánu</summary>
+          <form id="form-plan-settings" class="grid grid-cols-2 gap-3 px-5 pb-5 sm:grid-cols-3" novalidate>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Příchod (plán)</span>
+              <input name="startTime" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevná doba od</span>
+              <input name="coreStart" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevná doba do</span>
+              <input name="coreEnd" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Denní fond (h)</span>
+              <input name="dailyFundHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Max. práce za den (h)</span>
+              <input name="maxWorkedHoursPerDay" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <ul id="plan-settings-warnings" class="col-span-full space-y-1 rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" hidden></ul>
+            <p class="col-span-full text-xs text-slate-500 dark:text-slate-400">Změny se ukládají automaticky. Denní fond platí pro celou aplikaci (přesčasy, banka, měsíční fond).</p>
+          </form>
+        </details>
+
+        <div>
+          <div class="flex items-center gap-2">
+            <button id="btn-plan-prev" type="button" class="rounded-xl p-2.5 hover:bg-white dark:hover:bg-slate-900" aria-label="Předchozí měsíc">
+              <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.8 15.2a1 1 0 0 1-1.4 0l-4.5-4.5a1 1 0 0 1 0-1.4l4.5-4.5a1 1 0 1 1 1.4 1.4L9 10l3.8 3.8a1 1 0 0 1 0 1.4z" clip-rule="evenodd"/></svg>
+            </button>
+            <h2 class="flex-1 text-center text-lg font-bold">Plán: <span id="plan-month-title"></span></h2>
+            <button id="btn-plan-next" type="button" class="rounded-xl p-2.5 hover:bg-white dark:hover:bg-slate-900" aria-label="Další měsíc">
+              <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.2 4.8a1 1 0 0 1 1.4 0l4.5 4.5a1 1 0 0 1 0 1.4l-4.5 4.5a1 1 0 0 1-1.4-1.4L11 10 7.2 6.2a1 1 0 0 1 0-1.4z" clip-rule="evenodd"/></svg>
+            </button>
+          </div>
+          <div class="mt-1 flex flex-wrap justify-center gap-2">
+            <button id="btn-plan-today" type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-white dark:text-indigo-400 dark:hover:bg-slate-900">Aktuální měsíc</button>
+            <button id="btn-bulk-fill" type="button" class="rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-700" hidden></button>
+          </div>
+        </div>
+        <div id="plan-summary" class="grid grid-cols-2 gap-2 sm:grid-cols-3"></div>
+        <ul id="plan-warnings" class="space-y-1 rounded-2xl bg-amber-50 p-4 text-sm font-medium text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900" hidden></ul>
+        <div class="flex flex-wrap gap-1.5 text-[11px] font-medium">
+          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300">proběhlo</span>
+          <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200">plánováno</span>
+          <span class="rounded-full bg-violet-100 px-2 py-0.5 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200">pevný odchod</span>
+          <span class="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">výjimka</span>
+          <span class="rounded-full bg-teal-100 px-2 py-0.5 text-teal-800 dark:bg-teal-900/60 dark:text-teal-200">doplněno</span>
+          <span class="rounded-full bg-sky-100 px-2 py-0.5 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200">nepřítomnost</span>
+          <span class="rounded-full bg-rose-100 px-2 py-0.5 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200">chybí záznam</span>
+        </div>
+        <div class="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+          <table id="plan-table" class="w-full text-[13px]">
+            <thead class="text-left text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              <tr>
+                <th class="px-2 py-2 font-medium">Datum</th>
+                <th class="px-1 py-2 text-center font-medium" title="Lichý / sudý týden">L/S</th>
+                <th class="px-1 py-2 font-medium">Typ</th>
+                <th class="px-2 py-2 text-right font-medium">Plán</th>
+                <th class="px-2 py-2 text-right font-medium">Odchod</th>
+                <th class="px-2 py-2 text-right font-medium" title="Skutečnost">Skut.</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="text-xs text-slate-500 dark:text-slate-400">Klepnutím na dnešní nebo budoucí den nastavíte výjimku (dovolená, lékař, pevný odchod či hodiny). Proběhlý den otevře úpravu docházky.</p>
+      </div>
+
       <!-- ---------- Banka ---------- -->
       <div id="tab-bank" class="space-y-4" hidden>
         <div class="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-5 text-white shadow-lg shadow-indigo-600/20">
@@ -245,12 +327,15 @@
 
     <!-- Spodní navigace (mobil) -->
     <nav class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur md:hidden dark:border-slate-800 dark:bg-slate-900/90" aria-label="Sekce">
-      <div class="mx-auto grid max-w-md grid-cols-3">
+      <div class="mx-auto grid max-w-md grid-cols-4">
         <button data-tab="overview" class="tab-btn flex flex-col items-center gap-0.5 py-2 text-xs font-medium">
           <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>Přehled
         </button>
         <button data-tab="month" class="tab-btn flex flex-col items-center gap-0.5 py-2 text-xs font-medium">
           <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path stroke-linecap="round" d="M3.5 10h17M8 3v4M16 3v4"/></svg>Měsíc
+        </button>
+        <button data-tab="plan" class="tab-btn flex flex-col items-center gap-0.5 py-2 text-xs font-medium">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H6.5A1.5 1.5 0 0 0 5 6.5v12A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 17.5 5H15M9 5a1.5 1.5 0 0 0 1.5 1.5h3A1.5 1.5 0 0 0 15 5M9 5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5m-6 7 2 2 4-4"/></svg>Plán
         </button>
         <button data-tab="bank" class="tab-btn flex flex-col items-center gap-0.5 py-2 text-xs font-medium">
           <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10 12 4l9 6M5 10v8m4.7-8v8m4.6-8v8M19 10v8M3 20h18"/></svg>Banka
@@ -269,6 +354,11 @@
           <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Typ dne</span>
           <select name="type" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></select>
         </label>
+        <label id="dlg-day-absence" class="block">
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Nepřítomnost (h)</span>
+          <input name="absenceHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" placeholder="celý den" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+          <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">Prázdné = celý den. Při části dne zadejte i příchod a odchod odpracované části.</span>
+        </label>
         <div id="dlg-day-times" class="grid grid-cols-2 gap-3">
           <label class="block">
             <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Příchod</span>
@@ -283,6 +373,10 @@
           <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Poznámka</span>
           <input name="note" type="text" maxlength="200" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         </label>
+        <div class="flex items-center gap-2">
+          <button id="dlg-day-fill" type="button" class="rounded-xl bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-100 dark:bg-teal-950/50 dark:text-teal-300 dark:hover:bg-teal-900/50">Doplnit docházku</button>
+          <span id="dlg-day-filled" class="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800 dark:bg-teal-900/60 dark:text-teal-200" hidden>doplněno</span>
+        </div>
         <p id="dlg-day-preview" class="tabular rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300"></p>
         <p id="dlg-day-error" class="text-sm text-red-600 dark:text-red-400" hidden></p>
       </div>
@@ -301,6 +395,57 @@
       <div class="mt-5 flex justify-end gap-2">
         <button value="cancel" class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800">Zrušit</button>
         <button id="dlg-confirm-ok" value="ok" class="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700">Potvrdit</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ===== Dialog výjimky dne (plán) ===== -->
+  <dialog id="dlg-override" class="w-[calc(100%-2rem)] max-w-md rounded-2xl bg-white p-0 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-slate-100">
+    <form id="form-override" method="dialog" class="p-5" novalidate>
+      <h2 id="ov-title" class="text-lg font-bold"></h2>
+      <p id="ov-sub" class="text-sm text-slate-500 dark:text-slate-400"></p>
+      <div class="mt-4 grid grid-cols-2 gap-3">
+        <label class="col-span-2 block">
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Nepřítomnost</span>
+          <select name="absenceType" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></select>
+        </label>
+        <label id="ov-absence-hours" class="col-span-2 block">
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Hodin nepřítomnosti</span>
+          <input name="absenceHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" placeholder="celý den" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+        </label>
+        <label class="block">
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevný odchod</span>
+          <input name="leaveAt" type="time" data-time24 data-optional data-empty-label="podle rozvrhu" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+        </label>
+        <label class="block">
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevné hodiny práce</span>
+          <input name="workedHours" type="number" min="0" max="24" step="0.25" inputmode="decimal" placeholder="dopočítat" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+        </label>
+        <label class="col-span-2 block">
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Poznámka</span>
+          <input name="note" type="text" maxlength="200" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+        </label>
+      </div>
+      <ul id="ov-warnings" class="mt-3 space-y-1 rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" hidden></ul>
+      <p id="ov-preview" class="tabular mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300"></p>
+      <p id="ov-error" class="mt-2 text-sm text-red-600 dark:text-red-400" hidden></p>
+      <div class="mt-5 flex items-center gap-2">
+        <button id="ov-delete" type="button" class="rounded-xl px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">Odstranit</button>
+        <button value="cancel" formnovalidate class="ml-auto rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800">Zrušit</button>
+        <button id="ov-save" value="save" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">Uložit</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ===== Náhled hromadného doplnění ===== -->
+  <dialog id="dlg-fill" class="w-[calc(100%-2rem)] max-w-md rounded-2xl bg-white p-0 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-slate-100">
+    <form method="dialog" class="p-5">
+      <h2 class="text-lg font-bold">Doplnit docházku</h2>
+      <p id="fill-count" class="mt-1 text-sm text-slate-500 dark:text-slate-400"></p>
+      <ul id="fill-list" class="mt-3 max-h-80 divide-y divide-slate-100 overflow-y-auto text-sm dark:divide-slate-800"></ul>
+      <div class="mt-5 flex justify-end gap-2">
+        <button value="cancel" class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800">Zrušit</button>
+        <button value="ok" class="rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">Doplnit</button>
       </div>
     </form>
   </dialog>

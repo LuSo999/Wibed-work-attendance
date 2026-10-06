@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Testy calc.js</title>
+  <title>Unit testy</title>
   <script type="importmap">
     { "imports": { "node:test": "./node-shim.js", "node:assert/strict": "./node-shim.js" } }
   </script>
@@ -14,12 +14,13 @@
   </style>
 </head>
 <body>
-  <h1>Unit testy <code>js/calc.js</code></h1>
+  <h1>Unit testy <code>js/calc.js</code> a <code>js/plan.js</code></h1>
   <p id="summary">Běží…</p>
   <ul id="results"></ul>
   <script type="module">
     import { runAll } from './node-shim.js';
     await import('./calc.test.js');
+    await import('./plan.test.js');
     const list = document.getElementById('results');
     const { passed, failed } = await runAll(({ name, ok, err }) => {
       const li = document.createElement('li');

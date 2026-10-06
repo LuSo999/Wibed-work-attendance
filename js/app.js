@@ -3,11 +3,17 @@ import { firebaseConfig } from './firebase-config.js';
 import { applyTheme, cycleTheme, getTheme } from './theme.js';
 import {
   DAY_TYPES, DAY_TYPE_LABELS, MONTH_LABELS, dayResult, dayFund, holidayName, isWorkday,
-  weekdayLabel, daysInMonth, toDateString, monthSummary, bankBalance,
+  isAbsenceType, weekdayLabel, daysInMonth, toDateString, monthSummary, bankBalance,
   validateDay, validateWithdrawal, formatMinutes, parseTime,
 } from './calc.js';
 import { buildMonthCsv, downloadCsv } from './csv.js';
 import { enhanceTimeInputs } from './time24.js';
+import {
+  normalizeSettings, dailyFundMinutes, buildMonthPlan, fillRecord,
+} from './plan.js';
+import {
+  initPlanView, renderPlanView, weekBadgeHtml, flipParity,
+} from './plan-view.js';
 import {
   $, $$, escapeHtml, todayStr, nowTime, formatDateLong, formatDateShort, toast,
   confirmDialog, setError,
@@ -21,6 +27,8 @@ const state = {
   user: null,
   records: new Map(), // 'YYYY-MM-DD' → záznam
   withdrawals: [],
+  settings: normalizeSettings({}), // users/{uid}/settings/plan
+  overrides: new Map(), // 'YYYY-MM-DD' → výjimka dne pro plán
   month: { y: now.getFullYear(), m: now.getMonth() + 1 },
   timeTouched: false,
   unsubscribe: null,
@@ -29,11 +37,13 @@ let auth; // modul auth.js (načte se dynamicky)
 let store; // modul store.js
 
 const records = () => [...state.records.values()];
-const balance = () => bankBalance(records(), state.withdrawals);
+/** Denní fond uživatele v minutách (nastavení plánu, výchozí 8 h). */
+const fund = () => dailyFundMinutes(state.settings);
+const balance = () => bankBalance(records(), state.withdrawals, fund());
 
 function safeResult(record) {
   try {
-    return dayResult(record);
+    return dayResult(record, fund());
   } catch {
     return null;
   }
@@ -57,6 +67,7 @@ const TYPE_BADGE = {
   doctor: 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300',
   comp: 'bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-300',
 };
+const FILLED_CHIP = '<span class="inline-block rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800 dark:bg-teal-900/60 dark:text-teal-200">doplněno</span>';
 const badge = (type) => `<span class="inline-block rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_BADGE[type] ?? ''}">${escapeHtml(DAY_TYPE_LABELS[type] ?? type)}</span>`;
 
 // ---------------------------------------------------------------------------
@@ -93,7 +104,9 @@ function renderThemeButton() {
 // ---------------------------------------------------------------------------
 // Navigace
 // ---------------------------------------------------------------------------
-const TABS = { overview: 'prehled', month: 'mesic', bank: 'banka' };
+const TABS = {
+  overview: 'prehled', month: 'mesic', plan: 'plan', bank: 'banka',
+};
 
 function showTab(tab) {
   if (!TABS[tab]) tab = 'overview';
@@ -129,6 +142,7 @@ function dayInfoText(date) {
   if (holiday) parts.push(`státní svátek – ${holiday}`);
   else if (!isWorkday(date)) parts.push('víkend');
   if (!isWorkday(date)) parts.push('fond 0 h, odpracovaná doba je celá přesčas');
+  if (isAbsenceType($('#entry-type').value)) parts.push('část dne nastavíte v „Upravit den podrobně“');
   return parts.join(' · ');
 }
 
@@ -140,7 +154,7 @@ function renderBank() {
     el.classList.toggle('text-rose-200', b < 0);
   }
   const t = new Date();
-  const s = monthSummary(records(), t.getFullYear(), t.getMonth() + 1, state.withdrawals);
+  const s = monthSummary(records(), t.getFullYear(), t.getMonth() + 1, state.withdrawals, fund());
   $('#bank-month').textContent = `${signed(s.overtime)} h`;
   $('#bank-fund').textContent = `${formatMinutes(s.fund)} h`;
 }
@@ -164,9 +178,10 @@ function renderEntry() {
   }
   $('#btn-entry-edit').hidden = false;
   const res = safeResult(record);
-  if (record.type !== DAY_TYPES.WORK) {
+  const filledChip = record.filled ? FILLED_CHIP : '';
+  if (record.type !== DAY_TYPES.WORK && !res?.partial) {
     status.innerHTML = `
-      <div class="col-span-full flex items-center gap-2">${badge(record.type)}
+      <div class="col-span-full flex items-center gap-2">${badge(record.type)}${filledChip}
         <span class="text-slate-500 dark:text-slate-400">započteno ${formatMinutes(res?.credited ?? 0)} h${res?.bankDelta ? `, z banky ${signed(res.bankDelta)} h` : ''}</span>
       </div>`;
     return;
@@ -179,7 +194,9 @@ function renderEntry() {
     cell('Odchod', escapeHtml(record.departure ?? '—')),
     cell('Odpracováno', res?.complete ? `${formatMinutes(res.worked)} h` : '—'),
     cell('Přesčas', res?.complete ? `${signed(res.overtime)} h` : '—', res?.complete ? toneClass(res.overtime) : ''),
-  ].join('') + (res?.complete && res.break
+  ].join('') + (res?.partial || filledChip
+    ? `<p class="col-span-full flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">${res?.partial ? `${badge(record.type)} ${formatMinutes(res.absence)} h započteno` : ''}${filledChip}</p>`
+    : '') + (res?.complete && res.break
     ? `<p class="col-span-full text-xs text-slate-500 dark:text-slate-400">Pobyt ${formatMinutes(res.stay)} h, odečtena přestávka ${formatMinutes(res.break)} h.</p>`
     : '') + (res === null ? '<p class="col-span-full text-xs text-red-600">Záznam je neplatný (odchod před příchodem) – opravte ho.</p>' : '');
 }
@@ -187,7 +204,8 @@ function renderEntry() {
 /** Při změně data přepne výběr typu podle uloženého záznamu. */
 function syncEntryType() {
   const record = state.records.get($('#entry-date').value);
-  $('#entry-type').value = record?.type ?? DAY_TYPES.WORK;
+  // částečná nepřítomnost se zapisuje příchodem/odchodem jako pracovní den
+  $('#entry-type').value = record && !safeResult(record)?.partial ? record.type : DAY_TYPES.WORK;
 }
 
 function refreshTime() {
@@ -195,7 +213,7 @@ function refreshTime() {
 }
 
 function saveRecord(record) {
-  const err = validateDay(record, balanceWithout(record.date));
+  const err = validateDay(record, balanceWithout(record.date), fund());
   if (err) return err;
   // Zápis se díky offline cache Firestore projeví okamžitě; chyba (např. pravidla) se ohlásí později.
   store.saveDay(state.user.uid, record).catch((e) => toast(`Uložení se nezdařilo: ${e.message}`, 'error'));
@@ -209,11 +227,12 @@ async function onClock(kind) {
   if (!date || parseTime(time) === null) return setError(errEl, 'Zadejte platné datum a čas.');
 
   const existing = state.records.get(date);
-  const base = existing?.type === DAY_TYPES.WORK
-    ? { ...existing }
+  const partial = existing && safeResult(existing)?.partial;
+  const base = existing?.type === DAY_TYPES.WORK || partial
+    ? { ...existing, filled: false }
     : { date, type: DAY_TYPES.WORK, arrival: null, departure: null, note: existing?.note ?? '' };
 
-  if (existing && existing.type !== DAY_TYPES.WORK
+  if (existing && existing.type !== DAY_TYPES.WORK && !partial
     && !(await confirmDialog(`Den je zapsán jako „${DAY_TYPE_LABELS[existing.type]}“. Přepsat na pracovní den?`, 'Přepsat'))) return;
 
   const field = kind === 'arrival' ? 'arrival' : 'departure';
@@ -256,7 +275,7 @@ function summaryCard(label, value, sub = '', cls = '') {
 function renderMonth() {
   const { y, m } = state.month;
   $('#month-title').textContent = `${MONTH_LABELS[m - 1]} ${y}`;
-  const s = monthSummary(records(), y, m, state.withdrawals);
+  const s = monthSummary(records(), y, m, state.withdrawals, fund());
   $('#month-summary').innerHTML = [
     summaryCard('Fond', `${formatMinutes(s.fund)} h`, `${s.workdays} pracovních dní`),
     summaryCard('Odpracováno', `${formatMinutes(s.credited)} h`, `z toho práce ${formatMinutes(s.worked)} h`),
@@ -278,9 +297,11 @@ function renderMonth() {
     let middle = '';
     let right = '';
     if (r) {
-      middle = r.type === DAY_TYPES.WORK
-        ? `<span class="tabular">${escapeHtml(r.arrival ?? '—')} – ${escapeHtml(r.departure ?? '…')}</span>`
-        : badge(r.type);
+      const times = `<span class="tabular">${escapeHtml(r.arrival ?? '—')} – ${escapeHtml(r.departure ?? '…')}</span>`;
+      if (r.type === DAY_TYPES.WORK) middle = times;
+      else if (res?.partial) middle = `${r.arrival ? `${times} ` : ''}${badge(r.type)} <span class="tabular text-xs">${formatMinutes(res.absence)} h</span>`;
+      else middle = badge(r.type);
+      if (r.filled) middle += ` ${FILLED_CHIP}`;
       if (res === null) {
         right = '<span class="text-xs text-red-600">neplatné</span>';
       } else if (res.complete) {
@@ -320,7 +341,7 @@ function shiftMonth(delta) {
 
 function exportMonth() {
   const { y, m } = state.month;
-  const csv = buildMonthCsv(records(), state.withdrawals, y, m);
+  const csv = buildMonthCsv(records(), state.withdrawals, y, m, fund());
   downloadCsv(csv, `dochazka-${y}-${String(m).padStart(2, '0')}.csv`);
 }
 
@@ -328,29 +349,38 @@ function exportMonth() {
 // Dialog úpravy dne
 // ---------------------------------------------------------------------------
 let dialogDate = null;
+let dialogFilled = false; // příznak „doplněno“ – ruční úprava časů ho zruší
 
 function dialogRecord() {
   const f = $('#form-day');
+  const absence = isAbsenceType(f.type.value) && f.absenceHours.value !== '';
   return {
     date: dialogDate,
     type: f.type.value,
     arrival: f.arrival.value || null,
     departure: f.departure.value || null,
+    absenceHours: absence ? f.absenceHours.valueAsNumber : null,
+    filled: dialogFilled,
     note: f.note.value,
   };
 }
 
 function updateDialog() {
   const rec = dialogRecord();
-  $('#dlg-day-times').hidden = rec.type !== DAY_TYPES.WORK;
-  const err = validateDay(rec, balanceWithout(dialogDate));
+  const res0 = safeResult(rec);
+  $('#dlg-day-absence').hidden = rec.type === DAY_TYPES.WORK;
+  $('#dlg-day-times').hidden = rec.type !== DAY_TYPES.WORK && !res0?.partial;
+  $('#dlg-day-filled').hidden = !dialogFilled;
+  $('#dlg-day-fill').hidden = !isWorkday(dialogDate) || dialogDate > todayStr();
+  const err = validateDay(rec, balanceWithout(dialogDate), fund());
   setError($('#dlg-day-error'), err);
   $('#dlg-day-save').disabled = Boolean(err);
-  const res = err ? null : safeResult(rec);
-  let text = `Fond dne ${formatMinutes(dayFund(dialogDate))} h`;
-  if (res && rec.type === DAY_TYPES.WORK && res.complete) {
-    text = `Pobyt ${formatMinutes(res.stay)} h − přestávka ${formatMinutes(res.break)} h = ${formatMinutes(res.worked)} h · přesčas ${signed(res.overtime)} h`;
-  } else if (res && rec.type !== DAY_TYPES.WORK) {
+  const res = err ? null : res0;
+  let text = `Fond dne ${formatMinutes(dayFund(dialogDate, fund()))} h`;
+  if (res && (rec.type === DAY_TYPES.WORK || res.partial) && res.complete) {
+    text = `Pobyt ${formatMinutes(res.stay)} h − přestávka ${formatMinutes(res.break)} h = ${formatMinutes(res.worked)} h`
+      + `${res.partial ? ` + ${DAY_TYPE_LABELS[rec.type].toLowerCase()} ${formatMinutes(res.absence)} h` : ''} · přesčas ${signed(res.overtime)} h`;
+  } else if (res && rec.type !== DAY_TYPES.WORK && !res.partial) {
     text = `Započteno ${formatMinutes(res.credited)} h${res.bankDelta ? ` · z banky ${signed(res.bankDelta)} h` : ' · bez přesčasu'}`;
   }
   $('#dlg-day-preview').textContent = text;
@@ -363,12 +393,79 @@ function openDayDialog(date) {
   f.type.value = r?.type ?? DAY_TYPES.WORK;
   f.arrival.value = r?.arrival ?? '';
   f.departure.value = r?.departure ?? '';
+  f.absenceHours.value = r?.absenceHours ?? '';
   f.note.value = r?.note ?? '';
+  dialogFilled = Boolean(r?.filled);
   $('#dlg-day-title').textContent = formatDateLong(date);
   $('#dlg-day-sub').textContent = holidayName(date) ?? (isWorkday(date) ? 'Pracovní den' : 'Víkend');
   $('#dlg-day-delete').hidden = !r;
   updateDialog();
   $('#dlg-day').showModal();
+}
+
+/** „Doplnit docházku“ v dialogu: nastaví odchod tak, aby den vyšel přesně do fondu. */
+function fillDialog() {
+  const current = dialogRecord();
+  const base = { ...current, departure: null };
+  const rec = fillRecord(dialogDate, base, state.settings, state.overrides.get(dialogDate));
+  if (!rec) return setError($('#dlg-day-error'), 'Den nelze doplnit (odchod by vyšel po půlnoci).');
+  const f = $('#form-day');
+  f.type.value = rec.type;
+  f.absenceHours.value = rec.absenceHours ?? '';
+  f.arrival.value = rec.arrival ?? '';
+  f.departure.value = rec.departure ?? '';
+  dialogFilled = true;
+  updateDialog();
+}
+
+// ---------------------------------------------------------------------------
+// Plán – karta „Dnes“ a odznak týdne
+// ---------------------------------------------------------------------------
+function todayPlanDay() {
+  const t = new Date();
+  const plan = buildMonthPlan({
+    year: t.getFullYear(), month: t.getMonth() + 1, today: todayStr(), settings: state.settings, records: records(), overrides: [...state.overrides.values()],
+  });
+  return plan.days.find((d) => d.date === todayStr());
+}
+
+function renderTodayPlan() {
+  $('#overview-week').innerHTML = weekBadgeHtml(state.settings);
+  const d = todayPlanDay();
+  const title = $('#today-plan-title');
+  const sub = $('#today-plan-sub');
+  const btn = $('#btn-use-plan');
+  btn.hidden = true;
+  if (!d || (!d.workday && !d.record)) {
+    title.textContent = 'Dnes se podle plánu nepracuje';
+    sub.textContent = d?.holiday ?? 'víkend';
+  } else if (d.plannedWorked === null) {
+    title.textContent = `Dnes hotovo: ${formatMinutes(d.credited)} h`;
+    sub.textContent = d.record?.departure ? `odchod ${d.record.departure}` : DAY_TYPE_LABELS[d.type] ?? '';
+  } else if (d.kind === 'absence') {
+    title.textContent = `Dnes: ${DAY_TYPE_LABELS[d.type]}`;
+    sub.textContent = 'celý den';
+  } else if (d.plannedLeave) {
+    title.textContent = `Dnes: plánovaný odchod v ${d.plannedLeave}`;
+    const how = d.kind === 'fixed' ? 'pevný odchod' : d.kind === 'override' ? 'výjimka' : 'dopočteno do fondu';
+    sub.textContent = `${formatMinutes(d.plannedWorked)} h práce · příchod ${d.arrival}${d.actualArrival ? '' : ' (plán)'} · ${how}`;
+    btn.hidden = false;
+    btn.dataset.leave = d.plannedLeave;
+  } else {
+    title.textContent = 'Dnes nelze naplánovat odchod';
+    sub.textContent = d.warnings[0] ?? '';
+  }
+}
+
+function usePlan() {
+  const leave = $('#btn-use-plan').dataset.leave;
+  if (!leave) return;
+  $('#entry-date').value = todayStr();
+  syncEntryType();
+  $('#entry-time').value = leave;
+  state.timeTouched = true;
+  renderEntry();
+  toast(`Čas nastaven na ${leave} – potvrďte tlačítkem Odchod`);
 }
 
 // ---------------------------------------------------------------------------
@@ -392,7 +489,7 @@ function renderBankHistory() {
   const items = [
     ...state.withdrawals.map((w) => ({ date: w.date, minutes: w.minutes, note: w.note, id: w.id })),
     ...records().filter((r) => r.type === DAY_TYPES.COMP).map((r) => ({
-      date: r.date, minutes: -(safeResult(r)?.bankDelta ?? 0), note: r.note, comp: true,
+      date: r.date, minutes: safeResult(r)?.absence ?? 0, note: r.note, comp: true,
     })),
   ].sort((a, b) => b.date.localeCompare(a.date));
 
@@ -415,8 +512,10 @@ function renderBankHistory() {
 // ---------------------------------------------------------------------------
 function renderAll() {
   renderBank();
+  renderTodayPlan();
   renderEntry();
   renderMonth();
+  renderPlanView();
   renderBankHistory();
   updateWithdrawForm();
   if ($('#dlg-day').open) updateDialog();
@@ -490,6 +589,8 @@ function onUser(user) {
   state.user = user;
   state.records = new Map();
   state.withdrawals = [];
+  state.settings = normalizeSettings({});
+  state.overrides = new Map();
 
   if (!user) {
     $('#form-auth').reset();
@@ -512,6 +613,14 @@ function onUser(user) {
     },
     onBank(list) {
       state.withdrawals = list;
+      renderAll();
+    },
+    onSettings(data) {
+      state.settings = normalizeSettings(data);
+      renderAll();
+    },
+    onOverrides(list) {
+      state.overrides = new Map(list.map((o) => [o.date, o]));
       renderAll();
     },
     onError(err) {
@@ -565,6 +674,10 @@ function bindAppEvents() {
   $('#btn-departure').addEventListener('click', () => onClock('departure'));
   $('#btn-save-type').addEventListener('click', onSaveType);
   $('#btn-entry-edit').addEventListener('click', () => openDayDialog($('#entry-date').value));
+  $('#btn-use-plan').addEventListener('click', usePlan);
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('[data-flip-parity]')) flipParity();
+  });
   setInterval(refreshTime, 15_000);
 
   // Měsíc
@@ -584,7 +697,11 @@ function bindAppEvents() {
   // Dialog dne
   const dayForm = $('#form-day');
   typeOptions(dayForm.type);
-  dayForm.addEventListener('input', updateDialog);
+  dayForm.addEventListener('input', (e) => {
+    if (e.target.name !== 'note') dialogFilled = false; // ruční úprava ruší „doplněno“
+    updateDialog();
+  });
+  $('#dlg-day-fill').addEventListener('click', fillDialog);
   dayForm.addEventListener('submit', (e) => {
     if (e.submitter?.value !== 'save') return;
     const err = saveRecord(dialogRecord());
@@ -663,6 +780,19 @@ async function main() {
 
   setupAuthScreen();
   bindAppEvents();
+  initPlanView({
+    getState: () => ({
+      settings: state.settings, records: records(), overrides: [...state.overrides.values()],
+    }),
+    saveRecord,
+    openDayDialog,
+    saveSettings: (s) => store.saveSettings(state.user.uid, s)
+      .catch((e) => toast(`Uložení nastavení se nezdařilo: ${e.message}`, 'error')),
+    saveOverride: (o) => store.saveOverride(state.user.uid, o)
+      .catch((e) => toast(`Uložení výjimky se nezdařilo: ${e.message}`, 'error')),
+    deleteOverride: (date) => store.deleteOverride(state.user.uid, date)
+      .catch((e) => toast(`Smazání výjimky se nezdařilo: ${e.message}`, 'error')),
+  });
   auth.watchUser(onUser);
 }
 

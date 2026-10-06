@@ -4,7 +4,7 @@
 // (mřížka hodin 00–23, mřížka minut po 5 + jemné ±1 min, psaní číslicemi z klávesnice).
 // Původní input zůstane jako skrytý nosič hodnoty 'HH:MM' (stejné id/name),
 // takže zbytek aplikace s ním pracuje beze změny – čte i nastavuje .value
-// a poslouchá událost 'input'.
+// a poslouchá událost 'input'. Atribut data-empty-label nastaví text prázdné hodnoty.
 const pad = (n) => String(n).padStart(2, '0');
 const valueDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
 
@@ -169,7 +169,7 @@ function enhance(input) {
 
   const sync = () => {
     const v = valueDesc.get.call(input);
-    text.textContent = v || '--:--';
+    text.textContent = v || input.dataset.emptyLabel || '--:--';
     text.classList.toggle('text-slate-400', !v);
     field.setAttribute('aria-label', `${label}: ${v || 'nezadáno'}`);
   };

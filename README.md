@@ -12,6 +12,8 @@ HTML + Vanilla JS (ES moduly), Firebase (Authentication + Firestore), TailwindCS
 - **Banka přesčasů:** součet denních přesčasů (mohou být i záporné) minus čerpání. Výběr náhradního volna po hodinách, nad zůstatek nelze vybrat.
 - **Měsíční přehled:** fond (pracovní dny × 8 h, bez víkendů a **státních svátků ČR**), odpracováno, přesčas, čerpání a úprava jednotlivých dnů.
 - Práce o víkendu nebo ve svátek má fond 0 h, celá odpracovaná doba je tedy přesčas.
+- **Plán docházky:** pevné odchody pro lichý a sudý týden. Ostatní dny se dopočítají tak, aby měsíc vyšel přesně do fondu (viz níže).
+- **Částečná nepřítomnost** (např. 6 h práce + 2 h lékař) a **doplnění docházky** jedním klepnutím.
 - **Export CSV** zobrazeného měsíce (UTF-8 s BOM, středník – otevře se správně v Excelu).
 - Tmavý a světlý režim (výchozí podle systému, volba se pamatuje), **PWA** (instalace na plochu, offline shell, offline data díky cache Firestore).
 
@@ -23,6 +25,8 @@ manifest.json, sw.js  PWA
 firestore.rules       bezpečnostní pravidla Firestore
 js/firebase-config.js ← SEM vložte konfiguraci Firebase
 js/calc.js            čisté výpočty (pravidla v konstantě RULES)
+js/plan.js            čisté výpočty plánu měsíce (ISO týden, parita, rozložení deficitu)
+js/plan-view.js       UI záložky Plán
 js/csv.js             export CSV
 js/app.js             UI a logika obrazovek
 js/auth.js, js/store.js, js/firebase.js, js/theme.js, js/ui.js
@@ -34,6 +38,11 @@ Data ve Firestore:
 
 - `users/{uid}/attendance/{YYYY-MM-DD}` → `{ type, arrival, departure, note, updatedAt }`
 - `users/{uid}/overtimeBank/{id}` → `{ date, minutes, note, createdAt }` (výběry z banky)
+- `users/{uid}/settings/plan` → nastavení plánu (viz níže)
+- `users/{uid}/planOverrides/{YYYY-MM-DD}` → `{ absenceType, absenceHours, leaveAt, workedHours, note }` (výjimky dnů)
+
+U záznamu docházky slouží `type` jako typ nepřítomnosti. `absenceHours` (v hodinách, prázdné = celý den) určuje
+částečnou nepřítomnost a `filled: true` označuje automaticky doplněný záznam.
 
 Zůstatek banky se neukládá, vždy se dopočítává z dat, takže nemůže vzniknout nesoulad.
 
@@ -111,6 +120,46 @@ Soubor `.nojekyll` zajistí, že GitHub Pages servíruje soubory tak, jak jsou.
 > **Aktualizace verze:** service worker načítá vlastní soubory „network-first“, takže online uživatelé vždy dostanou aktuální verzi.
 > Pokud změníte seznam souborů aplikace, upravte pole `SHELL` (a případně `VERSION`) v `sw.js`.
 
+## Plánování docházky (záložka Plán)
+
+Plán se nikam neukládá. Pokaždé se znovu spočítá z nastavení, výjimek a skutečné docházky. Banka přesčasů do něj nevstupuje,
+každý měsíc se vyrovnává na nulu samostatně.
+
+**Nastavení** (`settings/plan`, každý uživatel má vlastní):
+
+| Pole | Výchozí | Význam |
+|---|---|---|
+| `startTime` | 06:00 | plánovaný příchod |
+| `coreStart`, `coreEnd` | 09:00, 14:00 | pevná pracovní doba (jen pro varování a minimum zkrácení) |
+| `dailyFundHours` | 8 | denní fond, platí pro **celou aplikaci** (přesčasy, banka, měsíční fond) |
+| `maxWorkedHoursPerDay` | 10 | strop odpracovaných hodin běžného dne |
+| `parityFlip` | false | prohodí lichý a sudý týden |
+| `schedule.odd/even.{1–5}` | prázdné | **pevný** čas odchodu pro daný den lichého/sudého ISO týdne, prázdné = běžný den |
+
+Pevný odchod před `coreEnd` nebo příchod po `coreStart` aplikace označí upozorněním „porušuješ pevnou pracovní dobu“.
+Uložit ho ale jde, je to jen upozornění.
+
+**Výpočet:**
+
+1. Pracovní dny jsou po–pá bez státních svátků. Dny s uzavřenou docházkou berou skutečnost. Celodenní nepřítomnost je pevný den s plným fondem.
+   Proběhlý pracovní den bez záznamu se počítá jako 0 h a nabídne se k doplnění.
+2. Den s pevným odchodem má odpracováno od příchodu (dnešní skutečný, jinak `startTime`) do odchodu minus přestávka. Nikdy se neprodlužuje.
+   Částečná nepřítomnost v takový den proběhne před odchodem a pracovní blok se o ni zkrátí.
+3. Běžný den má základ = fond − hodiny nepřítomnosti.
+4. Deficit (fond − skutečnost − pevné dny − základy) se rozloží rovnoměrně po 15 min na běžné dny.
+   Zbylé dávky jdou na dny rozprostřené přes celý měsíc, zbytek pod 15 min dostane jeden den uprostřed, takže měsíc vyjde přesně na nulu.
+   Strop `maxWorkedHoursPerDay` přeleje hodiny na ostatní dny. Když to nestačí, plán ukáže, kolik hodin chybí.
+5. Přebytek běžné dny rovnoměrně zkrátí, nejvýš na odchod v `coreEnd`. Zbytek plán ohlásí jako „přebývá“.
+6. Hodiny se převádějí na odchod nejmenším pobytem, který dá požadované hodiny. Kvůli přestávce dá například 6:00 h práce pobyt 6:30 h.
+7. Parita se určuje podle ISO týdne každého dne zvlášť, i když týden přesahuje hranici měsíců.
+
+**Výjimky dnů:** klepnutím na dnešní nebo budoucí den v plánu nastavíte nepřítomnost (celý den nebo hodiny), pevný odchod nebo pevné
+hodiny práce. Takový den je pevný a ostatní dny se dopočítají kolem něj.
+
+**Doplnit docházku:** v dialogu dne nebo hromadně v plánu (s náhledem) nastaví odchod tak, aby den vyšel přesně do fondu.
+Odchod = příchod (nebo `startTime`) + pobyt pro (fond − nepřítomnost). U běžného dne je to 8:30 od příchodu.
+Záznam dostane štítek „doplněno“, který se zobrazí i v CSV. Ruční úprava časů štítek zruší.
+
 ## Lokální spuštění
 
 ```bash
@@ -122,7 +171,7 @@ Aplikaci nelze otevřít přímo ze souboru (`file://`), protože ES moduly a se
 
 ## Testy
 
-Výpočetní modul `js/calc.js` (a export CSV) má unit testy bez jakýchkoli závislostí:
+Výpočetní moduly `js/calc.js` a `js/plan.js` (a export CSV) mají unit testy bez jakýchkoli závislostí:
 
 ```bash
 node --test          # Node.js 20+
@@ -132,7 +181,8 @@ Alternativně v prohlížeči: spusťte lokální server a otevřete <http://loc
 
 ## Úprava pravidel
 
-Délka fondu, interval a délka přestávky jsou na jednom místě, v konstantě `RULES` v [`js/calc.js`](js/calc.js).
+Interval a délka přestávky (a výchozí denní fond) jsou na jednom místě, v konstantě `RULES` v [`js/calc.js`](js/calc.js).
+Denní fond si každý uživatel může změnit v Nastavení plánu.
 Státní svátky ČR (včetně pohyblivého Velkého pátku a Velikonočního pondělí) počítá funkce `czechHolidays`.
 
 ## Ikony

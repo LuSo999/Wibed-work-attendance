@@ -20,7 +20,7 @@ function row(values) {
 }
 
 /** Text CSV (včetně BOM) pro zvolený měsíc. */
-export function buildMonthCsv(records, withdrawals, y, m) {
+export function buildMonthCsv(records, withdrawals, y, m, dailyFund = undefined) {
   const byDate = new Map(records.map((r) => [r.date, r]));
   const lines = [];
   lines.push(row([
@@ -34,18 +34,19 @@ export function buildMonthCsv(records, withdrawals, y, m) {
     if (!r) continue;
     let res;
     try {
-      res = dayResult(r);
+      res = dayResult(r, dailyFund);
     } catch {
       res = null;
     }
     const holiday = holidayName(date);
-    const note = [r.note, holiday].filter(Boolean).join(' | ');
+    const absenceNote = res?.partial ? `${DAY_TYPE_LABELS[r.type]} ${formatMinutes(res.absence)} h` : '';
+    const note = [r.filled ? 'doplněno' : '', absenceNote, r.note, holiday].filter(Boolean).join(' | ');
     lines.push(row([
       date.split('-').reverse().join('.'),
       weekdayLabel(date),
       DAY_TYPE_LABELS[r.type] ?? r.type,
-      r.type === 'work' ? r.arrival ?? '' : '',
-      r.type === 'work' ? r.departure ?? '' : '',
+      r.arrival ?? '',
+      r.departure ?? '',
       res?.stay != null ? formatMinutes(res.stay) : '',
       res?.stay != null ? formatMinutes(res.break) : '',
       res ? formatMinutes(res.credited) : '',
@@ -66,7 +67,7 @@ export function buildMonthCsv(records, withdrawals, y, m) {
     }
   }
 
-  const s = monthSummary(records, y, m, withdrawals);
+  const s = monthSummary(records, y, m, withdrawals, dailyFund);
   lines.push('');
   lines.push(row([`Souhrn ${MONTH_LABELS[m - 1]} ${y}`]));
   lines.push(row(['Pracovní dny', s.workdays]));
