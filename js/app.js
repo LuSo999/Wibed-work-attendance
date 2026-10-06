@@ -445,12 +445,17 @@ function renderTodayPlan() {
   } else if (d.kind === 'absence') {
     title.textContent = `Dnes: ${DAY_TYPE_LABELS[d.type]}`;
     sub.textContent = 'celý den';
-  } else if (d.plannedLeave) {
-    title.textContent = `Dnes: plánovaný odchod v ${d.plannedLeave}`;
-    const how = d.kind === 'fixed' ? 'pevný odchod' : d.kind === 'override' ? 'výjimka' : 'dopočteno do fondu';
-    sub.textContent = `${formatMinutes(d.plannedWorked)} h práce · příchod ${d.arrival}${d.actualArrival ? '' : ' (plán)'} · ${how}`;
+  } else if (d.plannedLeave && d.arrival) {
+    const how = d.kind === 'fixed' ? 'pevný den' : d.kind === 'override' ? 'výjimka' : 'dopočteno do fondu';
+    // před příchodem nabídne plánovaný příchod, po něm plánovaný odchod
+    const next = d.actualArrival ? 'departure' : 'arrival';
+    title.textContent = next === 'arrival'
+      ? `Dnes: příchod v ${d.arrival}, odchod v ${d.plannedLeave}`
+      : `Dnes: plánovaný odchod v ${d.plannedLeave}`;
+    sub.textContent = `${formatMinutes(d.plannedWorked)} h práce${d.actualArrival ? ` · příchod ${d.arrival}` : ''} · ${how}`;
     btn.hidden = false;
-    btn.dataset.leave = d.plannedLeave;
+    btn.dataset.time = next === 'arrival' ? d.arrival : d.plannedLeave;
+    btn.dataset.next = next;
   } else {
     title.textContent = 'Dnes nelze naplánovat odchod';
     sub.textContent = d.warnings[0] ?? '';
@@ -458,14 +463,14 @@ function renderTodayPlan() {
 }
 
 function usePlan() {
-  const leave = $('#btn-use-plan').dataset.leave;
-  if (!leave) return;
+  const { time, next } = $('#btn-use-plan').dataset;
+  if (!time) return;
   $('#entry-date').value = todayStr();
   syncEntryType();
-  $('#entry-time').value = leave;
+  $('#entry-time').value = time;
   state.timeTouched = true;
   renderEntry();
-  toast(`Čas nastaven na ${leave} – potvrďte tlačítkem Odchod`);
+  toast(`Čas nastaven na ${time} – potvrďte tlačítkem ${next === 'arrival' ? 'Příchod' : 'Odchod'}`);
 }
 
 // ---------------------------------------------------------------------------

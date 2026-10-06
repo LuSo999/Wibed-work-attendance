@@ -5,8 +5,9 @@ import {
   hoursToMinutes, toTimeString,
 } from './calc.js';
 import {
-  WEEKDAY_NAMES, PARITY_LABELS, CORE_WARNING, buildMonthPlan, fillCandidates, isoWeek, weekParity,
-  normalizeSettings, settingsWarnings, leaveWarning, workedForStay, stayForWorked, rulesFromSettings,
+  WEEKDAY_NAMES, PARITY_LABELS, CORE_WARNING, ANCHOR_LABELS, buildMonthPlan, fillCandidates, isoWeek,
+  weekParity, normalizeSettings, settingsWarnings, timeWarnings, workedForStay, stayForWorked,
+  rulesFromSettings, switchAnchorMode,
 } from './plan.js';
 import { enhanceTimeInputs } from './time24.js';
 import {
@@ -48,34 +49,50 @@ export async function flipParity() {
 // ---------------------------------------------------------------------------
 // Rozvrh lichého / sudého týdne
 // ---------------------------------------------------------------------------
-const fieldCls = 'tabular w-full rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-800';
+const fieldCls = 'tabular w-full rounded-xl border border-slate-300 bg-white px-2.5 py-2 text-sm dark:border-slate-700 dark:bg-slate-800';
+
+/** Konce dne z rozvrhu po doplnění kotvou (minuty nebo null = dopočítá se). */
+function scheduleEnds(settings, { arriveAt, leaveAt }) {
+  const anchor = parseTime(settings.anchorTime);
+  return {
+    arr: arriveAt ? parseTime(arriveAt) : settings.anchorMode === 'arrival' ? anchor : null,
+    lv: leaveAt ? parseTime(leaveAt) : settings.anchorMode === 'departure' ? anchor : null,
+  };
+}
 
 function renderWeeks(settings, avgRegular) {
   const today = todayStr();
   const current = weekParity(today, settings.parityFlip);
-  const key = JSON.stringify([settings.schedule, settings.parityFlip, settings.startTime, settings.coreEnd, current]);
+  const key = JSON.stringify([settings.schedule, settings.parityFlip, settings.anchorMode, settings.anchorTime, current]);
   const root = $('#plan-weeks');
+  const arrMode = settings.anchorMode === 'arrival';
+  const emptyArr = arrMode ? `${settings.anchorTime} kotva` : 'dopočítat';
+  const emptyLv = arrMode ? 'dopočítat' : `${settings.anchorTime} kotva`;
 
   if (key !== weeksKey) {
     weeksKey = key;
     root.innerHTML = ['odd', 'even'].map((week) => `
       <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 dark:bg-slate-900 ${week === current ? 'ring-2 ring-indigo-500' : 'ring-slate-200 dark:ring-slate-800'}">
-        <div class="mb-2 flex items-center justify-between">
+        <div class="mb-1 flex items-center justify-between">
           <h3 class="font-semibold">${week === 'odd' ? 'Lichý' : 'Sudý'} týden</h3>
           ${week === current ? '<span class="rounded-full bg-indigo-600 px-2 py-0.5 text-xs font-semibold text-white">tento týden</span>' : ''}
+        </div>
+        <div class="grid grid-cols-[2rem_1fr_1fr] gap-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <span></span><span>Příchod</span><span>Odchod</span>
         </div>
         <div class="divide-y divide-slate-100 dark:divide-slate-800">
           ${[1, 2, 3, 4, 5].map((day) => `
             <div class="py-2">
-              <div class="flex items-center gap-3">
-                <span class="w-8 shrink-0 font-medium">${WEEKDAY_NAMES[day].slice(0, 2)}</span>
-                <label class="min-w-0 flex-1">
-                  <span class="sr-only">${WEEKDAY_NAMES[day]} – odchod (${PARITY_LABELS[week]} týden)</span>
-                  <input type="time" data-time24 data-optional data-empty-label="běžný den" data-week="${week}" data-day="${day}" value="${escapeHtml(settings.schedule[week][day])}" class="${fieldCls}">
-                </label>
-                <span data-hours="${week}-${day}" class="tabular w-20 shrink-0 text-right text-sm"></span>
+              <div class="grid grid-cols-[2rem_1fr_1fr] items-center gap-2">
+                <span class="font-medium">${WEEKDAY_NAMES[day].slice(0, 2)}</span>
+                ${['arriveAt', 'leaveAt'].map((field) => `
+                <label class="min-w-0">
+                  <span class="sr-only">${WEEKDAY_NAMES[day]} – ${field === 'arriveAt' ? 'příchod' : 'odchod'} (${PARITY_LABELS[week]} týden)</span>
+                  <input type="time" data-time24 data-optional data-empty-label="${field === 'arriveAt' ? emptyArr : emptyLv}" data-week="${week}" data-day="${day}" data-field="${field}" value="${escapeHtml(settings.schedule[week][day][field])}" class="${fieldCls}">
+                </label>`).join('')}
               </div>
-              <p data-warn="${week}-${day}" class="mt-1 text-xs text-amber-700 dark:text-amber-400" hidden></p>
+              <p data-hours="${week}-${day}" class="tabular mt-1 pl-10 text-xs"></p>
+              <p data-warn="${week}-${day}" class="mt-0.5 pl-10 text-xs text-amber-700 dark:text-amber-400" hidden></p>
             </div>`).join('')}
         </div>
       </section>`).join('');
@@ -83,22 +100,22 @@ function renderWeeks(settings, avgRegular) {
   }
 
   // texty hodin a varování se aktualizují bez překreslení výběrů času
+  const warnings = settingsWarnings(settings).filter((w) => w.field === 'schedule');
   for (const week of ['odd', 'even']) {
     for (const day of [1, 2, 3, 4, 5]) {
-      const leaveAt = settings.schedule[week][day];
+      const { arr, lv } = scheduleEnds(settings, settings.schedule[week][day]);
       const hoursEl = root.querySelector(`[data-hours="${week}-${day}"]`);
-      if (leaveAt) {
-        const worked = workedForStay(Math.max(0, parseTime(leaveAt) - parseTime(settings.startTime)), rulesFromSettings(settings));
-        hoursEl.innerHTML = `<b>${h(worked)}</b>`;
-        hoursEl.title = `Od ${settings.startTime} do ${leaveAt} po odečtení přestávky`;
+      if (arr !== null && lv !== null) {
+        const worked = workedForStay(Math.max(0, lv - arr), rulesFromSettings(settings));
+        hoursEl.innerHTML = `<span class="font-semibold">pevný den · ${h(worked)}</span>`;
+        hoursEl.title = `Od ${toTimeString(arr)} do ${toTimeString(lv)} po odečtení přestávky – den se neprodlužuje`;
       } else {
-        hoursEl.innerHTML = avgRegular != null
-          ? `<span class="text-slate-500 dark:text-slate-400">≈ ${h(avgRegular)}</span>`
-          : '<span class="text-slate-400">—</span>';
-        hoursEl.title = 'Běžný den – dopočítá se podle měsíce (průměr na běžný den tohoto měsíce)';
+        const what = arr === null ? 'příchod' : 'odchod';
+        hoursEl.innerHTML = `<span class="text-slate-500 dark:text-slate-400">dopočítá se ${what}${avgRegular != null ? ` · ≈ ${h(avgRegular)}` : ''}</span>`;
+        hoursEl.title = 'Běžný den – hodiny se dopočítají podle měsíce (průměr na běžný den tohoto měsíce)';
       }
-      const warn = leaveWarning(leaveAt, settings);
-      setError(root.querySelector(`[data-warn="${week}-${day}"]`), warn ? `⚠ Odchod před ${settings.coreEnd} – ${warn.toLowerCase()}` : null);
+      const w = warnings.filter((x) => x.week === week && x.day === day).map((x) => `⚠ ${x.message}`);
+      setError(root.querySelector(`[data-warn="${week}-${day}"]`), w.join(' ') || null);
     }
   }
 }
@@ -108,16 +125,18 @@ function onScheduleChange(e) {
   if (!input) return;
   const { settings } = ctx.getState();
   const next = normalizeSettings(settings);
-  next.schedule[input.dataset.week][input.dataset.day] = input.value;
+  const { week, day, field } = input.dataset;
+  next.schedule[week][day] = { ...next.schedule[week][day], [field]: input.value };
   ctx.saveSettings(next);
-  const warn = leaveWarning(input.value, next);
-  toast(warn ? `Uloženo – ${warn.toLowerCase()}` : 'Rozvrh uložen');
+  const warn = settingsWarnings(next).some((w) => w.field === 'schedule' && w.week === week && String(w.day) === day);
+  toast(warn ? 'Uloženo – zkontrolujte upozornění' : 'Rozvrh uložen');
 }
 
 // ---------------------------------------------------------------------------
 // Nastavení
 // ---------------------------------------------------------------------------
-const SETTINGS_FIELDS = ['startTime', 'coreStart', 'coreEnd', 'dailyFundHours', 'maxWorkedHoursPerDay', 'breakAfterHours', 'breakLengthMinutes'];
+const TIME_FIELDS = ['anchorTime', 'earliestArrival', 'latestDeparture', 'coreStart', 'coreEnd'];
+const SETTINGS_FIELDS = [...TIME_FIELDS, 'dailyFundHours', 'maxWorkedHoursPerDay', 'breakAfterHours', 'breakLengthMinutes'];
 const NUMBER_FIELDS = ['dailyFundHours', 'maxWorkedHoursPerDay', 'breakAfterHours', 'breakLengthMinutes'];
 
 /** Vysvětlení pravidla přestávky s příkladem pro denní fond. */
@@ -125,7 +144,9 @@ function breakRuleText(settings) {
   const rules = rulesFromSettings(settings);
   const stay = stayForWorked(rules.DAILY_FUND_MIN, rules);
   return `${describeBreakRule(rules)} Na denní fond ${formatMinutes(rules.DAILY_FUND_MIN)} h je tedy potřeba pobyt ${formatMinutes(stay)} h `
-    + `(příchod ${settings.startTime} → odchod ${toTimeString(Math.min(1439, parseTime(settings.startTime) + stay))}). `
+    + (settings.anchorMode === 'arrival'
+      ? `(příchod ${settings.anchorTime} → odchod ${toTimeString(Math.min(1439, parseTime(settings.anchorTime) + stay))}). `
+      : `(příchod ${toTimeString(Math.max(0, parseTime(settings.anchorTime) - stay))} ← odchod ${settings.anchorTime}). `)
     + 'Pravidlo platí pro výpočet odpracovaných hodin, přesčasů i plánu.';
 }
 
@@ -134,6 +155,10 @@ function renderSettingsForm(settings) {
   for (const name of SETTINGS_FIELDS) {
     if (document.activeElement !== f[name]) f[name].value = settings[name];
   }
+  f.anchorMode.value = settings.anchorMode;
+  $('#anchor-hint').textContent = settings.anchorMode === 'arrival'
+    ? `Běžný den začíná v ${settings.anchorTime}, odchod se dopočítá a při napracování posouvá (nejpozději ${settings.latestDeparture}).`
+    : `Běžný den končí v ${settings.anchorTime}, příchod se dopočítá a při napracování posouvá dřív (nejdříve ${settings.earliestArrival}).`;
   $('#break-rule-text').textContent = breakRuleText(settings);
   const warnings = settingsWarnings(settings).filter((w) => w.field !== 'schedule');
   const el = $('#plan-settings-warnings');
@@ -141,12 +166,31 @@ function renderSettingsForm(settings) {
   el.hidden = !warnings.length;
 }
 
+async function onAnchorModeChange() {
+  const f = $('#form-plan-settings');
+  const { settings } = ctx.getState();
+  const mode = f.anchorMode.value;
+  const { settings: next, changes } = switchAnchorMode(settings, mode);
+  if (!changes.length) return;
+  const ok = await confirmDialog(`Přepnout pevný čas na „${ANCHOR_LABELS[mode]}“? Co se změní:\n\n${changes.map((c) => `• ${c}`).join('\n')}`, 'Přepnout', { danger: false });
+  if (!ok) {
+    f.anchorMode.value = settings.anchorMode;
+    return;
+  }
+  ctx.saveSettings(next);
+  toast(`Pevný čas: ${ANCHOR_LABELS[mode].toLowerCase()} v ${next.anchorTime}`);
+}
+
 function onSettingsChange(e) {
   const f = $('#form-plan-settings');
   if (!e.target.name) return;
+  if (e.target.name === 'anchorMode') {
+    onAnchorModeChange();
+    return;
+  }
   const { settings } = ctx.getState();
   const raw = { ...settings };
-  for (const name of ['startTime', 'coreStart', 'coreEnd']) raw[name] = f[name].value;
+  for (const name of TIME_FIELDS) raw[name] = f[name].value;
   for (const name of NUMBER_FIELDS) raw[name] = f[name].valueAsNumber;
   const breakErr = !(raw.breakAfterHours > 0 && raw.breakAfterHours <= 24) ? 'Interval přestávky musí být 0,25–24 h.'
     : !(Number.isInteger(raw.breakLengthMinutes) && raw.breakLengthMinutes >= 0) ? 'Délka přestávky musí být celý počet minut (0 = bez přestávky).'
@@ -168,7 +212,7 @@ const ROW_STYLE = {
   filled: { row: 'bg-teal-50/70 dark:bg-teal-950/30', label: 'doplněno', chip: 'bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-200' },
   missing: { row: 'bg-rose-50/70 dark:bg-rose-950/30', label: 'chybí záznam', chip: 'bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200' },
   absence: { row: 'bg-sky-50/70 dark:bg-sky-950/30', label: 'nepřítomnost', chip: 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200' },
-  fixed: { row: 'bg-violet-50/70 dark:bg-violet-950/30', label: 'pevný odchod', chip: 'bg-violet-100 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200' },
+  fixed: { row: 'bg-violet-50/70 dark:bg-violet-950/30', label: 'pevný den', chip: 'bg-violet-100 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200' },
   override: { row: 'bg-amber-50/70 dark:bg-amber-950/30', label: 'výjimka', chip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200' },
   regular: { row: 'bg-indigo-50/60 dark:bg-indigo-950/30', label: 'plánováno', chip: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200' },
   off: { row: 'text-slate-400 dark:text-slate-600', label: '', chip: '' },
@@ -182,22 +226,37 @@ function styleKey(d) {
 
 const chip = (key, text = ROW_STYLE[key].label) => `<span class="inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${ROW_STYLE[key].chip}">${escapeHtml(text)}</span>`;
 
+/** Který konec dne je pevný z rozvrhu/výjimky. */
+function fixedLabel(d) {
+  if (d.explicitArrival && d.explicitLeave) return 'pevné časy';
+  if (d.explicitLeave) return 'pevný odchod';
+  if (d.explicitArrival) return 'pevný příchod';
+  return null;
+}
+
 function typeText(d) {
   if (!d.workday && d.kind === 'off') return d.holiday ? escapeHtml(d.holiday) : 'víkend';
   const parts = [];
   if (d.type && d.type !== DAY_TYPES.WORK) {
     parts.push(escapeHtml(DAY_TYPE_LABELS[d.type]) + (d.absence && d.absence < d.credited ? ` ${formatMinutes(d.absence)} h` : ''));
   }
-  parts.push(chip(styleKey(d)));
-  if (d.kind === 'fixed' && d.override) parts.push(chip('fixed'));
+  const fixed = fixedLabel(d);
+  if (d.kind === 'fixed') parts.push(chip(styleKey(d), styleKey(d) === 'fixed' ? fixed ?? (d.actualArrival ? 'dnešní příchod' : 'pevný den') : undefined));
+  else parts.push(chip(styleKey(d)));
+  if (fixed && (d.kind !== 'fixed' || styleKey(d) !== 'fixed')) parts.push(chip('fixed', fixed));
   return parts.join(' ');
 }
 
+/** Příchod/odchod: skutečnost normálně, plán tlumeně. */
+function timeCell(actual, planned) {
+  if (actual) return `<span>${escapeHtml(actual)}</span>`;
+  if (planned) return `<span class="italic text-slate-400 dark:text-slate-500" title="plán">${planned}</span>`;
+  return '';
+}
+
 function actualText(d) {
-  const r = d.record;
-  if (!r) return d.kind === 'missing' ? '<span class="text-rose-600 dark:text-rose-400">—</span>' : '';
-  if (d.plannedWorked === null && d.actual != null) return `<b>${formatMinutes(d.actual)}</b>`;
-  return r.arrival ? `<span class="text-slate-500 dark:text-slate-400">${escapeHtml(r.arrival)}–</span>` : '';
+  if (!d.record) return d.kind === 'missing' ? '<span class="text-rose-600 dark:text-rose-400">—</span>' : '';
+  return d.plannedWorked === null && d.actual != null ? `<b>${formatMinutes(d.actual)}</b>` : '';
 }
 
 /** Celý popis dne do tooltipu řádku. */
@@ -256,12 +315,13 @@ function renderMonthPlan() {
     const warn = d.warnings.length ? `<span class="block text-[11px] text-amber-700 dark:text-amber-400">⚠ ${warnLabel}</span>` : '';
     return `
       <tr data-plan-date="${d.date}" title="${escapeHtml(rowTitle(d))}" class="cursor-pointer border-t border-slate-100 hover:brightness-95 dark:border-slate-800 ${ROW_STYLE[key].row} ${d.date === today ? 'font-semibold outline outline-2 -outline-offset-2 outline-indigo-500' : ''}">
-        <td class="whitespace-nowrap px-2 py-2"><span class="tabular">${dayNum}.</span> <span class="text-[11px] text-slate-500 dark:text-slate-400">${weekdayLabel(d.date)}</span></td>
-        <td class="px-1 py-2 text-center"><span class="rounded px-1 text-[11px] font-bold ${d.parity === 'odd' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200' : 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200'}" title="Týden ${d.week} · ${PARITY_LABELS[d.parity]}">${d.parity === 'odd' ? 'L' : 'S'}</span></td>
+        <td class="whitespace-nowrap px-2 py-2"><span class="tabular">${dayNum}.</span> <span class="text-[11px] text-slate-500 dark:text-slate-400">${weekdayLabel(d.date)}</span>
+          <span class="ml-0.5 rounded px-1 text-[10px] font-bold ${d.parity === 'odd' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200' : 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200'}" title="Týden ${d.week} · ${PARITY_LABELS[d.parity]}">${d.parity === 'odd' ? 'L' : 'S'}</span></td>
         <td class="px-1 py-2 text-xs">${typeText(d)}${warn}</td>
-        <td class="tabular whitespace-nowrap px-2 py-2 text-right">${d.plannedWorked !== null && d.kind !== 'absence' ? formatMinutes(d.plannedWorked) : ''}</td>
-        <td class="tabular whitespace-nowrap px-2 py-2 text-right">${d.plannedLeave ? `<b>${d.plannedLeave}</b>` : ''}</td>
-        <td class="tabular whitespace-nowrap px-2 py-2 text-right">${actualText(d)}</td>
+        <td class="tabular whitespace-nowrap px-1.5 py-2 text-right">${timeCell(d.record?.arrival, d.plannedWorked !== null ? d.arrival : null)}</td>
+        <td class="tabular whitespace-nowrap px-1.5 py-2 text-right">${timeCell(d.record?.departure, d.plannedWorked !== null ? d.plannedLeave : null)}</td>
+        <td class="tabular whitespace-nowrap px-1.5 py-2 text-right">${d.plannedWorked !== null && d.kind !== 'absence' ? formatMinutes(d.plannedWorked) : ''}</td>
+        <td class="tabular whitespace-nowrap px-1.5 py-2 text-right">${actualText(d)}</td>
       </tr>`;
   }).join('');
 }
@@ -324,20 +384,21 @@ function overrideFromForm() {
     date: overrideDate,
     absenceType: f.absenceType.value || null,
     absenceHours: f.absenceType.value && f.absenceHours.value !== '' ? f.absenceHours.valueAsNumber : null,
+    arriveAt: f.arriveAt.value || null,
     leaveAt: f.leaveAt.value || null,
     workedHours: f.workedHours.value !== '' ? f.workedHours.valueAsNumber : null,
     note: f.note.value,
   };
 }
 
+const isEmptyOverride = (ov) => !ov.absenceType && !ov.arriveAt && !ov.leaveAt && ov.workedHours == null;
+
 function updateOverrideDialog() {
   const ov = overrideFromForm();
   $('#ov-absence-hours').hidden = !ov.absenceType;
   const { settings } = ctx.getState();
-  const warns = [];
-  const lw = leaveWarning(ov.leaveAt, settings);
-  if (lw) warns.push(`Odchod ${ov.leaveAt} je před koncem pevné pracovní doby (${settings.coreEnd}). ${lw}`);
-  if (ov.leaveAt && ov.workedHours != null) warns.push('Jsou zadané pevné hodiny i pevný odchod – použijí se pevné hodiny.');
+  const warns = timeWarnings(ov.arriveAt ? parseTime(ov.arriveAt) : null, ov.leaveAt ? parseTime(ov.leaveAt) : null, settings);
+  if (ov.arriveAt && ov.leaveAt && ov.workedHours != null) warns.push('Jsou zadané pevné hodiny i oba časy – použijí se pevné hodiny a odchod se dopočítá od příchodu.');
   let err = null;
   if (ov.absenceHours != null && !(ov.absenceHours > 0)) err = 'Počet hodin nepřítomnosti musí být kladný.';
   if (ov.workedHours != null && !(ov.workedHours >= 0 && ov.workedHours <= 24)) err = 'Pevné hodiny musí být 0–24.';
@@ -348,12 +409,12 @@ function updateOverrideDialog() {
   w.hidden = !warns.length;
 
   if (!err) {
-    const empty = !ov.absenceType && !ov.leaveAt && ov.workedHours == null;
+    const empty = isEmptyOverride(ov);
     const plan = currentPlan(empty ? { date: overrideDate, remove: true } : ov);
     const d = plan.days.find((x) => x.date === overrideDate);
     const parts = [];
     if (d.kind === 'absence') parts.push(`Celý den ${DAY_TYPE_LABELS[d.type].toLowerCase()} (${h(d.credited)})`);
-    else if (d.plannedWorked !== null) parts.push(`Plán: ${h(d.plannedWorked)} práce${d.absence ? ` + ${h(d.absence)} nepřítomnost` : ''}, odchod ${d.plannedLeave ?? '—'}`);
+    else if (d.plannedWorked !== null) parts.push(`Plán: ${h(d.plannedWorked)} práce${d.absence ? ` + ${h(d.absence)} nepřítomnost` : ''}, ${d.arrival ?? '—'}–${d.plannedLeave ?? '—'}`);
     parts.push(plan.summary.unbalanced ? plan.warnings[0] : 'Měsíc vyjde na nulu.');
     $('#ov-preview').textContent = parts.join(' · ');
   }
@@ -366,6 +427,7 @@ export function openOverrideDialog(date) {
   const f = $('#form-override');
   f.absenceType.value = ov?.absenceType ?? '';
   f.absenceHours.value = ov?.absenceHours ?? '';
+  f.arriveAt.value = ov?.arriveAt ?? '';
   f.leaveAt.value = ov?.leaveAt ?? '';
   f.workedHours.value = ov?.workedHours ?? '';
   f.note.value = ov?.note ?? '';
@@ -413,13 +475,14 @@ export function initPlanView(context) {
   ovForm.addEventListener('submit', (e) => {
     if (e.submitter?.value !== 'save') return;
     const ov = overrideFromForm();
-    if (!ov.absenceType && !ov.leaveAt && ov.workedHours == null) {
+    if (isEmptyOverride(ov)) {
       ctx.deleteOverride(overrideDate);
       toast('Výjimka odstraněna');
       return;
     }
     ctx.saveOverride(ov);
-    toast(leaveWarning(ov.leaveAt, ctx.getState().settings) ? 'Výjimka uložena – porušuješ pevnou pracovní dobu' : 'Výjimka uložena');
+    const warned = timeWarnings(ov.arriveAt ? parseTime(ov.arriveAt) : null, ov.leaveAt ? parseTime(ov.leaveAt) : null, ctx.getState().settings).length;
+    toast(warned ? 'Výjimka uložena – zkontrolujte upozornění' : 'Výjimka uložena');
   });
   $('#ov-delete').addEventListener('click', async () => {
     const date = overrideDate;

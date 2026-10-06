@@ -54,11 +54,16 @@ export function toast(message, kind = 'success') {
   }, kind === 'error' ? 6000 : 2500);
 }
 
-/** Potvrzovací dialog → Promise<boolean>. */
-export function confirmDialog(text, okLabel = 'Potvrdit') {
+/** Potvrzovací dialog → Promise<boolean>. Bez `danger` má potvrzovací tlačítko neutrální barvu. */
+export function confirmDialog(text, okLabel = 'Potvrdit', { danger = true } = {}) {
   const dlg = $('#dlg-confirm');
   $('#dlg-confirm-text').textContent = text;
-  $('#dlg-confirm-ok').textContent = okLabel;
+  const ok = $('#dlg-confirm-ok');
+  ok.textContent = okLabel;
+  ok.classList.toggle('bg-red-600', danger);
+  ok.classList.toggle('hover:bg-red-700', danger);
+  ok.classList.toggle('bg-indigo-600', !danger);
+  ok.classList.toggle('hover:bg-indigo-700', !danger);
   dlg.returnValue = '';
   dlg.showModal();
   return new Promise((resolve) => {

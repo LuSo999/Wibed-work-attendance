@@ -225,16 +225,31 @@
         <div id="plan-week" class="flex flex-wrap items-center gap-2"></div>
 
         <div>
-          <h2 class="mb-2 text-lg font-bold">Rozvrh odchodů</h2>
-          <p class="mb-3 text-sm text-slate-500 dark:text-slate-400">Pevný čas odchodu pro dny lichého a sudého týdne (např. vyzvedávání dítěte). Prázdné = běžný den, který se dopočítá tak, aby měsíc vyšel do fondu.</p>
+          <h2 class="mb-2 text-lg font-bold">Rozvrh příchodů a odchodů</h2>
+          <p class="mb-3 text-sm text-slate-500 dark:text-slate-400">Volitelný pevný příchod a odchod pro dny lichého a sudého týdne (např. vyzvedávání dítěte). Prázdné pole na straně pevného času se doplní kotvou z nastavení, druhé se dopočítá tak, aby měsíc vyšel do fondu. Den s oběma časy je plně pevný.</p>
           <div id="plan-weeks" class="grid gap-4 md:grid-cols-2"></div>
         </div>
 
         <details class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
           <summary class="cursor-pointer px-5 py-4 font-semibold">Nastavení pracovní doby a plánu</summary>
           <form id="form-plan-settings" class="grid grid-cols-2 gap-3 px-5 pb-5 sm:grid-cols-3" novalidate>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Příchod (plán)</span>
-              <input name="startTime" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <div class="col-span-full">
+              <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevný čas</span>
+              <div class="mt-1 grid grid-cols-2 gap-3">
+                <label class="block"><span class="sr-only">Pevný čas – druh</span>
+                  <select name="anchorMode" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                    <option value="arrival">Příchod</option>
+                    <option value="departure">Odchod</option>
+                  </select></label>
+                <label class="block"><span class="sr-only">Pevný čas</span>
+                  <input name="anchorTime" type="time" data-time24 class="tabular w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+              </div>
+              <p id="anchor-hint" class="mt-1 text-xs text-slate-500 dark:text-slate-400"></p>
+            </div>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Nejdřívější příchod</span>
+              <input name="earliestArrival" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Nejpozdější odchod</span>
+              <input name="latestDeparture" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
             <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevná doba od</span>
               <input name="coreStart" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
             <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevná doba do</span>
@@ -279,7 +294,7 @@
         <div class="flex flex-wrap gap-1.5 text-[11px] font-medium">
           <span class="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300">proběhlo</span>
           <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200">plánováno</span>
-          <span class="rounded-full bg-violet-100 px-2 py-0.5 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200">pevný odchod</span>
+          <span class="rounded-full bg-violet-100 px-2 py-0.5 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200">pevný čas / den</span>
           <span class="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">výjimka</span>
           <span class="rounded-full bg-teal-100 px-2 py-0.5 text-teal-800 dark:bg-teal-900/60 dark:text-teal-200">doplněno</span>
           <span class="rounded-full bg-sky-100 px-2 py-0.5 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200">nepřítomnost</span>
@@ -290,17 +305,17 @@
             <thead class="text-left text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <tr>
                 <th class="px-2 py-2 font-medium">Datum</th>
-                <th class="px-1 py-2 text-center font-medium" title="Lichý / sudý týden">L/S</th>
                 <th class="px-1 py-2 font-medium">Typ</th>
-                <th class="px-2 py-2 text-right font-medium">Plán</th>
-                <th class="px-2 py-2 text-right font-medium">Odchod</th>
-                <th class="px-2 py-2 text-right font-medium" title="Skutečnost">Skut.</th>
+                <th class="px-1.5 py-2 text-right font-medium">Přích.</th>
+                <th class="px-1.5 py-2 text-right font-medium">Odch.</th>
+                <th class="px-1.5 py-2 text-right font-medium" title="Plánované hodiny">Plán</th>
+                <th class="px-1.5 py-2 text-right font-medium" title="Skutečnost (h)">Skut.</th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
         </div>
-        <p class="text-xs text-slate-500 dark:text-slate-400">Klepnutím na dnešní nebo budoucí den nastavíte výjimku (dovolená, lékař, pevný odchod či hodiny). Proběhlý den otevře úpravu docházky.</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400">Časy u budoucích dnů (kurzívou) jsou plánované, u proběhlých skutečné. Klepnutím na dnešní nebo budoucí den nastavíte výjimku (dovolená, lékař, pevný příchod/odchod či hodiny). Proběhlý den otevře úpravu docházky.</p>
       </div>
 
       <!-- ---------- Banka ---------- -->
@@ -402,7 +417,7 @@
   <!-- ===== Potvrzovací dialog ===== -->
   <dialog id="dlg-confirm" class="w-[calc(100%-2rem)] max-w-sm rounded-2xl bg-white p-0 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-slate-100">
     <form method="dialog" class="p-5">
-      <p id="dlg-confirm-text" class="text-base"></p>
+      <p id="dlg-confirm-text" class="whitespace-pre-line text-base"></p>
       <div class="mt-5 flex justify-end gap-2">
         <button value="cancel" class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800">Zrušit</button>
         <button id="dlg-confirm-ok" value="ok" class="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700">Potvrdit</button>
@@ -425,10 +440,14 @@
           <input name="absenceHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" placeholder="celý den" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         </label>
         <label class="block">
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevný příchod</span>
+          <input name="arriveAt" type="time" data-time24 data-optional data-empty-label="podle rozvrhu" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+        </label>
+        <label class="block">
           <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevný odchod</span>
           <input name="leaveAt" type="time" data-time24 data-optional data-empty-label="podle rozvrhu" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         </label>
-        <label class="block">
+        <label class="col-span-2 block">
           <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevné hodiny práce</span>
           <input name="workedHours" type="number" min="0" max="24" step="0.25" inputmode="decimal" placeholder="dopočítat" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         </label>

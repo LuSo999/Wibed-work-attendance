@@ -130,13 +130,27 @@ každý měsíc se vyrovnává na nulu samostatně.
 
 | Pole | Výchozí | Význam |
 |---|---|---|
-| `startTime` | 06:00 | plánovaný příchod |
+| `anchorMode` | `arrival` | kotva plánu: `arrival` = pevný příchod a dopočítává/posouvá se odchod, `departure` = pevný odchod a dopočítává/posouvá se příchod |
+| `anchorTime` | 06:00 | čas kotvy (dřívější `startTime` se načte jako příchod) |
+| `earliestArrival`, `latestDeparture` | 05:00, 17:00 | hranice plánovače v obou režimech – posouvaný konec je nepřekročí |
 | `coreStart`, `coreEnd` | 09:00, 14:00 | pevná pracovní doba (jen pro varování a minimum zkrácení) |
 | `dailyFundHours` | 8 | denní fond, platí pro **celou aplikaci** (přesčasy, banka, měsíční fond) |
 | `maxWorkedHoursPerDay` | 10 | strop odpracovaných hodin běžného dne |
 | `breakAfterHours`, `breakLengthMinutes` | 6, 30 | polední přestávka: za každých celých `breakAfterHours` pobytu se odečte `breakLengthMinutes` (0 = bez přestávky). Platí pro **celou aplikaci**. |
 | `parityFlip` | false | prohodí lichý a sudý týden |
-| `schedule.odd/even.{1–5}` | prázdné | **pevný** čas odchodu pro daný den lichého/sudého ISO týdne, prázdné = běžný den |
+| `schedule.odd/even.{1–5}` | prázdné | `{ arriveAt, leaveAt }` – volitelný pevný příchod a odchod pro den lichého/sudého ISO týdne. Dřívější formát (jen čas odchodu) se načte jako `leaveAt`. |
+
+**Rozvrh dne a kotva:** prázdné pole na straně kotvy se doplní kotvou, druhé se dopočítá.
+
+| Zadáno | Režim „příchod“ | Režim „odchod“ |
+|---|---|---|
+| nic (běžný den) | příchod = kotva, odchod se posouvá | odchod = kotva, příchod se posouvá |
+| jen odchod | příchod = kotva → **plně pevný den** | odchod pevný, příchod se posouvá |
+| jen příchod | příchod pevný, odchod se posouvá | odchod = kotva → **plně pevný den** |
+| oba časy | **plně pevný den** | **plně pevný den** |
+
+Při přepnutí režimu aplikace ukáže, co se změní, a převede čas kotvy tak, aby běžný den zůstal stejný
+(příchod 06:00 ↔ odchod 14:30 při fondu 8 h a přestávce 30 min).
 
 Pevný odchod před `coreEnd` nebo příchod po `coreStart` aplikace označí upozorněním „porušuješ pevnou pracovní dobu“.
 Uložit ho ale jde, je to jen upozornění.
@@ -145,22 +159,29 @@ Uložit ho ale jde, je to jen upozornění.
 
 1. Pracovní dny jsou po–pá bez státních svátků. Dny s uzavřenou docházkou berou skutečnost. Celodenní nepřítomnost je pevný den s plným fondem.
    Proběhlý pracovní den bez záznamu se počítá jako 0 h a nabídne se k doplnění.
-2. Den s pevným odchodem má odpracováno od příchodu (dnešní skutečný, jinak `startTime`) do odchodu minus přestávka. Nikdy se neprodlužuje.
-   Částečná nepřítomnost v takový den proběhne před odchodem a pracovní blok se o ni zkrátí.
-3. Běžný den má základ = fond − hodiny nepřítomnosti.
+2. Plně pevný den (oba konce dané rozvrhem, výjimkou, kotvou nebo dnešním skutečným příchodem) má odpracováno = pobyt minus přestávka.
+   Nikdy se neprodlužuje. Částečná nepřítomnost v takový den proběhne uvnitř okna a pracovní blok se o ni zkrátí.
+3. Běžný den (jeden konec pevný) má základ = fond − hodiny nepřítomnosti. Posouvá se jen nefixovaný konec.
+   Je-li dnes zaznamenaný skutečný příchod, použije se místo plánovaného.
 4. Deficit (fond − skutečnost − pevné dny − základy) se rozloží rovnoměrně po 15 min na běžné dny.
    Zbylé dávky jdou na dny rozprostřené přes celý měsíc, zbytek pod 15 min dostane jeden den uprostřed, takže měsíc vyjde přesně na nulu.
-   Strop `maxWorkedHoursPerDay` přeleje hodiny na ostatní dny. Když to nestačí, plán ukáže, kolik hodin chybí.
-5. Přebytek běžné dny rovnoměrně zkrátí, nejvýš na odchod v `coreEnd`. Zbytek plán ohlásí jako „přebývá“.
+   Stropy (`maxWorkedHoursPerDay`, `latestDeparture` při posouvání odchodu, `earliestArrival` při posouvání příchodu)
+   přelijí hodiny na ostatní dny. Když to nestačí, plán ukáže, kolik hodin chybí.
+5. Přebytek běžné dny rovnoměrně zkrátí, nejvýš na odchod v `coreEnd` (resp. příchod v `coreStart` v režimu odchodu).
+   Zbytek plán ohlásí jako „přebývá“. Porušení pevné doby i hranic u pevných časů je jen upozornění.
 6. Hodiny se převádějí na odchod nejmenším pobytem, který dá požadované hodiny. Kvůli přestávce dá například 6:00 h práce pobyt 6:30 h
    (při výchozím pravidle přestávky).
 7. Parita se určuje podle ISO týdne každého dne zvlášť, i když týden přesahuje hranici měsíců.
 
-**Výjimky dnů:** klepnutím na dnešní nebo budoucí den v plánu nastavíte nepřítomnost (celý den nebo hodiny), pevný odchod nebo pevné
-hodiny práce. Takový den je pevný a ostatní dny se dopočítají kolem něj.
+**Tabulka plánu:** sloupce Příchod, Odchod, Plán (h) a Skutečnost (h). U proběhlých dnů jsou časy skutečné,
+u budoucích plánované (kurzívou, tlumeně).
+
+**Výjimky dnů:** klepnutím na dnešní nebo budoucí den v plánu nastavíte nepřítomnost (celý den nebo hodiny), pevný příchod či odchod
+nebo pevné hodiny práce. Takový den je pevný a ostatní dny se dopočítají kolem něj.
 
 **Doplnit docházku:** v dialogu dne nebo hromadně v plánu (s náhledem) nastaví odchod tak, aby den vyšel přesně do fondu.
-Odchod = příchod (nebo `startTime`) + pobyt pro (fond − nepřítomnost). U běžného dne je to 8:30 od příchodu.
+Pobyt = nejmenší pobyt pro (fond − nepřítomnost), u běžného dne 8:30. V režimu příchodu (nebo při zaznamenaném příchodu)
+se odchod dopočítá od příchodu, v režimu odchodu se příchod dopočítá zpět od odchodu.
 Záznam dostane štítek „doplněno“, který se zobrazí i v CSV. Ruční úprava časů štítek zruší.
 
 ## Lokální spuštění

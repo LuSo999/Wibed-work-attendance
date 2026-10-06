@@ -74,10 +74,13 @@ export function saveSettings(uid, settings) {
 }
 
 /** Uloží výjimku dne pro plán. */
-export function saveOverride(uid, { date, absenceType, absenceHours, leaveAt, workedHours, note }) {
+export function saveOverride(uid, {
+  date, absenceType, absenceHours, arriveAt, leaveAt, workedHours, note,
+}) {
   return setDoc(doc(overridesCol(uid), date), {
     absenceType: absenceType || null,
     absenceHours: absenceType ? hoursOrNull(absenceHours) : null,
+    arriveAt: arriveAt || null,
     leaveAt: leaveAt || null,
     workedHours: hoursOrNull(workedHours),
     note: note?.trim() || '',
