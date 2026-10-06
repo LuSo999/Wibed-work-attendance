@@ -1,0 +1,10 @@
+{
+  "name": "wibed-work-attendance",
+  "private": true,
+  "type": "module",
+  "description": "Evidence pracovní docházky – bez build kroku a bez závislostí.",
+  "scripts": {
+    "test": "node --test",
+    "start": "python3 -m http.server 8000"
+  }
+}
