@@ -548,4 +548,6 @@ export default {
   'table.today': 'dnes',
   'table.actualLong': 'Skutečnost',
   'table.weekHeader': 'Týden {week} · {parity} · {from} – {to}',
+  // Zkratky a kompaktní pohledy
+  'view.exit': 'Otevřít celou aplikaci',
 };

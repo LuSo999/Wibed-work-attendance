@@ -27,6 +27,7 @@ HTML + Vanilla JS (ES moduly), Firebase (Authentication + Firestore), TailwindCS
 - **Čeština a angličtina** (výchozí je vždy čeština), přepínač v horní liště, na přihlašovací obrazovce a v nastavení; změna se projeví hned bez obnovení stránky.
 - **České státní svátky** lze vypnout (např. při práci v zahraničí) – pak se všechny výpočty chovají, jako by svátky neexistovaly.
 - **Ochrana historie:** změna denního fondu, přestávky nebo svátků ukáže před uložením dopad na banku a uzavřené dny.
+- **Zkratky na ploše (Android):** Příchod, Odchod a Kompaktní přehled; úsporné pohledy `?view=compact` a `?view=quick` fungují i offline.
 - Tmavý a světlý režim (výchozí podle systému, volba se pamatuje), **PWA** (instalace na plochu, offline shell, offline data díky cache Firestore).
 
 ## Struktura
@@ -45,7 +46,7 @@ js/csv.js             export CSV
 js/app.js             UI a logika obrazovek
 js/auth.js, js/store.js, js/firebase.js, js/theme.js, js/ui.js
 tests/                unit testy (Node i prohlížeč)
-scripts/make-icons.py generátor PNG ikon
+scripts/make-icons.py generátor PNG ikon (aplikace i zkratek)
 ```
 
 Data ve Firestore:
@@ -242,6 +243,35 @@ plánovaného odchodu; obnovuje se každých 30 s.
 
 **Stav synchronizace:** ikona s popiskem v horní liště – *Uloženo* (vše je na serveru), *Čeká na odeslání* (`hasPendingWrites` v metadatech
 snapshotů Firestore) nebo *Offline* (bez připojení; zápisy se uloží v zařízení a odešlou později).
+
+## Zkratky a kompaktní pohledy
+
+Skutečné widgety na plochu PWA na Androidu nabídnout neumí. Místo nich má aplikace **zkratky** (dlouhé podržení ikony na ploše)
+a úsporné pohledy, které lze otevřít i jako samostatné záložky prohlížeče:
+
+| Adresa | Co udělá |
+|---|---|
+| `./?action=arrive` | zkratka **Příchod**: zapíše dnešní příchod v aktuálním čase jedním klepnutím, ukáže potvrzení se „Zpět“ |
+| `./?action=leave` | zkratka **Odchod**: totéž pro odchod |
+| `./?view=compact` | zkratka **Kompaktní přehled**: jen karta Dnes (příchod, plán, vynulování banky, odpočet), banka, pole času a tlačítka, bez navigace, šířka ~360 px |
+| `./?view=quick` | jen pole času a tlačítka Příchod / Odchod |
+
+- Existuje-li už pro dnešek příchod (nebo odchod), aplikace se před přepsáním zeptá. Zápis se provede až po přihlášení a načtení dat
+  a parametr `action` pak zmizí z adresy, aby se po obnovení stránky neopakoval.
+- Service worker má tyto adresy v cache (`SHELL` v `sw.js`, při výpadku sítě se hledá s `ignoreSearch`), takže fungují i offline;
+  zápisy se odešlou po připojení.
+- Názvy zkratek jsou v manifestu česky (manifest se nepřekládá, viz Jazyk a svátky).
+
+### Přidání na plochu a zkratky v Chromu na Androidu
+
+1. Otevřete <https://luso999.github.io/Wibed-work-attendance/> v **Chromu** a přihlaste se.
+2. Menu **⋮ → Přidat na plochu → Instalovat** (případně nabídka „Instalovat aplikaci“ dole na obrazovce).
+3. Na ploše **podržte ikonu Docházka** – objeví se zkratky **Příchod**, **Odchod** a **Kompaktní přehled**.
+4. Zkratku lze přetáhnout na plochu jako samostatnou ikonu (podržet a přetáhnout), takže příchod je pak jedno klepnutí.
+5. Úsporný pohled jen s tlačítky: otevřete `…/Wibed-work-attendance/?view=quick` a přidejte ho na plochu přes **⋮ → Přidat na plochu**
+   (vytvoří se záložka, která otevře aplikaci rovnou v tomto pohledu).
+
+Zkratky se načtou z `manifest.json` při instalaci; po změně manifestu je někdy potřeba aplikaci odinstalovat a nainstalovat znovu.
 
 ## Jazyk a svátky
 

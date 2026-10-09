@@ -2,7 +2,7 @@
 // - vlastní soubory: network-first (online vždy aktuální verze, offline z cache)
 // - CDN (Tailwind, Firebase SDK – pevné verze v URL): cache-first
 // - Firestore / Auth API: neřeší se, offline data obsluhuje Firestore SDK samo
-const VERSION = 'v10';
+const VERSION = 'v11';
 const CACHE = `dochazka-${VERSION}`;
 
 const SHELL = [
@@ -28,6 +28,14 @@ const SHELL = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',
+  './icons/shortcut-arrive.png',
+  './icons/shortcut-leave.png',
+  './icons/shortcut-compact.png',
+  // zkratky z manifestu a kompaktní pohledy (offline se obslouží s ignoreSearch)
+  './?action=arrive',
+  './?action=leave',
+  './?view=compact',
+  './?view=quick',
 ];
 
 const CDN_HOSTS = ['cdn.tailwindcss.com', 'www.gstatic.com'];

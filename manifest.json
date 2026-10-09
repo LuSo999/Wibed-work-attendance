@@ -11,9 +11,70 @@
   "background_color": "#f1f5f9",
   "theme_color": "#4f46e5",
   "icons": [
-    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "./icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Příchod",
+      "short_name": "Příchod",
+      "description": "Zapsat příchod teď",
+      "url": "./?action=arrive",
+      "icons": [
+        {
+          "src": "./icons/shortcut-arrive.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Odchod",
+      "short_name": "Odchod",
+      "description": "Zapsat odchod teď",
+      "url": "./?action=leave",
+      "icons": [
+        {
+          "src": "./icons/shortcut-leave.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Kompaktní přehled",
+      "short_name": "Přehled",
+      "description": "Karta Dnes, banka a tlačítka",
+      "url": "./?view=compact",
+      "icons": [
+        {
+          "src": "./icons/shortcut-compact.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

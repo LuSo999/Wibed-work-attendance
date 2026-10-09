@@ -42,7 +42,7 @@ test('množná čísla mají všechny tvary jazyka', () => {
 });
 
 /** Klíče použité v kódu a HTML (řetězce ve tvaru jmenný-prostor.klíč). */
-const NAMESPACES = 'app|brand|common|lang|theme|nav|menu|zero|progress|sync|setup|auth|type|parity|anchor|holiday|holidays|field|time|error|break|bank|entry|today|month|day|fill|week|schedule|settings|plan|summary|table|legend|tag|ov|bulk|rules|impact|csv|toast';
+const NAMESPACES = 'app|brand|common|lang|theme|nav|menu|view|zero|progress|sync|setup|auth|type|parity|anchor|holiday|holidays|field|time|error|break|bank|entry|today|month|day|fill|week|schedule|settings|plan|summary|table|legend|tag|ov|bulk|rules|impact|csv|toast';
 const KEY_RE = new RegExp(`['"\`]((?:${NAMESPACES})\\.[A-Za-z0-9_.-]+?)['"\`]`, 'g');
 
 test('každý klíč použitý v kódu existuje ve slovnících', () => {

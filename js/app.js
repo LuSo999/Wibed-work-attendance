@@ -38,8 +38,15 @@ const state = {
   month: { y: now.getFullYear(), m: now.getMonth() + 1 },
   timeTouched: false,
   sync: { pending: false, fromCache: false }, // metadata Firestore
+  recordsLoaded: false, // dorazil první snapshot docházky
   unsubscribe: null,
 };
+
+// Parametry adresy ze zkratek na ploše: ?action=arrive|leave (zápis jedním klepnutím),
+// ?view=compact|quick (úsporný pohled bez navigace).
+const params = new URLSearchParams(location.search);
+const VIEW = ['compact', 'quick'].includes(params.get('view')) ? params.get('view') : null;
+let pendingAction = { arrive: 'arrival', leave: 'departure' }[params.get('action')] ?? null;
 let auth; // modul auth.js (načte se dynamicky)
 let store; // modul store.js
 
@@ -214,7 +221,7 @@ const TABS = {
 };
 
 function showTab(tab) {
-  if (!TABS[tab]) tab = 'overview';
+  if (!TABS[tab] || VIEW) tab = 'overview';
   for (const k of Object.keys(TABS)) $(`#tab-${k}`).hidden = k !== tab;
   for (const btn of $$('.tab-btn')) {
     const active = btn.dataset.tab === tab;
@@ -227,6 +234,25 @@ function showTab(tab) {
     btn.setAttribute('aria-current', active ? 'page' : 'false');
   }
   if (tab === 'plan') scrollPlanToToday();
+}
+
+/**
+ * Zápis ze zkratky (?action=arrive|leave): aktuální čas pro dnešek jedním klepnutím.
+ * Spustí se až po přihlášení a prvním načtení docházky; existující záznam se před přepsáním potvrzuje.
+ */
+function runPendingAction() {
+  if (!pendingAction || !state.user || !state.recordsLoaded) return;
+  const kind = pendingAction;
+  pendingAction = null;
+  // parametr zmizí z adresy, aby se zápis po obnovení stránky neopakoval
+  params.delete('action');
+  const query = params.toString();
+  history.replaceState(null, '', `${location.pathname}${query ? `?${query}` : ''}${location.hash}`);
+  $('#entry-date').value = todayStr();
+  syncEntryType();
+  state.timeTouched = false;
+  refreshTime();
+  onClock(kind, { date: todayStr(), time: nowTime() });
 }
 
 function tabFromHash() {
@@ -335,9 +361,7 @@ function saveRecord(record) {
   return null;
 }
 
-async function onClock(kind) {
-  const date = $('#entry-date').value;
-  const time = $('#entry-time').value;
+async function onClock(kind, { date = $('#entry-date').value, time = $('#entry-time').value } = {}) {
   const errEl = $('#entry-error');
   if (!date || parseTime(time) === null) return setError(errEl, t('entry.invalidDateTime'));
 
@@ -854,6 +878,7 @@ function onUser(user) {
   state.overrides = new Map();
   state.app = { ...DEFAULT_APP };
   state.appLoaded = false;
+  state.recordsLoaded = false;
   applyHolidays();
 
   if (!user) {
@@ -873,7 +898,9 @@ function onUser(user) {
   state.unsubscribe = store.subscribe(user.uid, {
     onAttendance(list) {
       state.records = new Map(list.map((r) => [r.date, { type: DAY_TYPES.WORK, ...r }]));
+      state.recordsLoaded = true;
       renderAll();
+      runPendingAction();
     },
     onBank(list) {
       state.withdrawals = list;
@@ -1050,6 +1077,7 @@ function registerServiceWorker() {
 async function main() {
   // Výchozí jazyk je čeština; jinak poslední volba uložená v prohlížeči.
   setLanguage(storedLanguage(), { persist: false });
+  if (VIEW) document.body.classList.add(`view-${VIEW}`);
   applyTheme();
   enhanceTimeInputs();
   renderLanguage();

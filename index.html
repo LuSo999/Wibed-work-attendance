@@ -38,6 +38,14 @@
     dialog::backdrop { background: rgb(15 23 42 / .55); backdrop-filter: blur(2px); }
     /* Spodní list na mobilu, modální okno od šířky 768 px */
     dialog.sheet { max-height: 90vh; overflow-y: auto; }
+    /* Kompaktní pohledy (?view=compact | ?view=quick, např. ze zkratky na ploše) */
+    body.view-compact [data-hide-compact], body.view-quick [data-hide-quick] { display: none !important; }
+    body.view-compact main, body.view-quick main { max-width: 360px; padding-bottom: 1.5rem; }
+    body.view-compact #tab-overview { gap: .75rem; }
+    body.view-compact #tab-overview > * + * { margin-top: .75rem; }
+    body.view-compact #bank-balance { font-size: 1.875rem; line-height: 2.25rem; }
+    #view-exit { display: none; }
+    body.view-compact #view-exit, body.view-quick #view-exit { display: block; }
     @media (max-width: 767px) {
       dialog.sheet { margin: auto 0 0; max-width: 100%; width: 100%; border-bottom-left-radius: 0; border-bottom-right-radius: 0;
         padding-bottom: env(safe-area-inset-bottom, 0px); }
@@ -123,7 +131,7 @@
     <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/85 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85" style="padding-top: env(safe-area-inset-top, 0px)">
       <div class="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
         <span class="wordmark text-2xl" role="img" data-i18n-attr="aria-label:brand.name"><span data-i18n="brand.before"></span><svg class="wordmark-heart" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span data-i18n="brand.after"></span></span>
-        <nav class="ml-4 hidden gap-1 md:flex" data-i18n-attr="aria-label:nav.label">
+        <nav class="ml-4 hidden gap-1 md:flex" data-i18n-attr="aria-label:nav.label" data-hide-compact data-hide-quick>
           <button data-tab="overview" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium" data-i18n="nav.overview"></button>
           <button data-tab="month" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium" data-i18n="nav.month"></button>
           <button data-tab="plan" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium" data-i18n="nav.plan"></button>
@@ -149,17 +157,17 @@
 
       <!-- ---------- Přehled ---------- -->
       <div id="tab-overview" class="space-y-4">
-        <div id="overview-week" class="flex flex-wrap items-center gap-2"></div>
-        <div class="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-5 text-white shadow-lg shadow-indigo-600/20">
+        <div id="overview-week" class="flex flex-wrap items-center gap-2" data-hide-compact data-hide-quick></div>
+        <div data-hide-quick class="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-5 text-white shadow-lg shadow-indigo-600/20">
           <p class="text-sm font-medium text-indigo-100" data-i18n="bank.title"></p>
           <p id="bank-balance" class="tabular mt-1 text-4xl font-bold tracking-tight">–</p>
-          <div class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-indigo-100">
+          <div class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-indigo-100" data-hide-compact>
             <span><span data-i18n="bank.thisMonth"></span> <b id="bank-month" class="tabular text-white">–</b></span>
             <span><span data-i18n="bank.monthFund"></span> <b id="bank-fund" class="tabular text-white">–</b></span>
           </div>
         </div>
 
-        <div id="today-plan" class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+        <div id="today-plan" data-hide-quick class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
           <div class="flex flex-wrap items-center gap-3">
             <div class="min-w-0 flex-1">
               <p id="today-plan-title" class="font-semibold"></p>
@@ -205,9 +213,9 @@
           <p id="entry-nonwork-hint" class="text-sm text-slate-600 dark:text-slate-300" hidden></p>
           <p id="entry-error" class="mt-3 text-sm text-red-600 dark:text-red-400" hidden></p>
 
-          <div id="entry-status" class="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-sm sm:grid-cols-4 dark:border-slate-800"></div>
+          <div id="entry-status" data-hide-compact data-hide-quick class="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-sm sm:grid-cols-4 dark:border-slate-800"></div>
 
-          <details id="entry-more" class="mt-3 border-t border-slate-100 pt-2 dark:border-slate-800">
+          <details id="entry-more" data-hide-compact data-hide-quick class="mt-3 border-t border-slate-100 pt-2 dark:border-slate-800">
             <summary class="cursor-pointer select-none py-1.5 text-sm font-medium text-indigo-600 dark:text-indigo-400" data-i18n="entry.more"></summary>
             <div class="mt-2 space-y-3">
               <div class="flex flex-wrap items-end gap-3">
@@ -228,6 +236,7 @@
             </div>
           </details>
         </div>
+        <a id="view-exit" href="./" class="text-center text-sm font-medium text-indigo-600 hover:underline dark:text-indigo-400" data-i18n="view.exit"></a>
       </div>
 
       <!-- ---------- Měsíc ---------- -->
@@ -355,7 +364,7 @@
     </main>
 
     <!-- Spodní navigace (mobil) -->
-    <nav class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur md:hidden dark:border-slate-800 dark:bg-slate-900/90" data-i18n-attr="aria-label:nav.label">
+    <nav data-hide-compact data-hide-quick class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur md:hidden dark:border-slate-800 dark:bg-slate-900/90" data-i18n-attr="aria-label:nav.label">
       <div class="mx-auto grid max-w-md grid-cols-4">
         <button data-tab="overview" class="tab-btn flex flex-col items-center gap-0.5 py-2 text-xs font-medium">
           <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg><span data-i18n="nav.overview"></span>

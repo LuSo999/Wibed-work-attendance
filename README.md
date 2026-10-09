@@ -27,6 +27,7 @@ HTML + vanilla JS (ES modules), Firebase (Authentication + Firestore), TailwindC
 - **Czech and English** (the default is always Czech), switch in the top bar, on the sign-in screen and in the settings; changes apply immediately without a reload.
 - **Czech public holidays** can be turned off (e.g. when working abroad) – all calculations then behave as if there were no holidays.
 - **History protection:** changing the daily hours, the break or the holidays shows the impact on the bank and closed days before saving.
+- **Home screen shortcuts (Android):** Arrival, Departure and Compact overview; the lightweight views `?view=compact` and `?view=quick` also work offline.
 - Dark and light theme (system default, the choice is remembered), **PWA** (install to home screen, offline shell, offline data thanks to the Firestore cache).
 
 ## Structure
@@ -45,7 +46,7 @@ js/csv.js             CSV export
 js/app.js             UI and screen logic
 js/auth.js, js/store.js, js/firebase.js, js/theme.js, js/ui.js
 tests/                unit tests (Node and browser)
-scripts/make-icons.py PNG icon generator
+scripts/make-icons.py PNG icon generator (app and shortcuts)
 ```
 
 Data in Firestore:
@@ -243,6 +244,35 @@ Undo restores the previous state of the day (or deletes the record if there was 
 
 **Sync status:** an icon with a label in the top bar – *Saved* (everything is on the server), *Waiting to send* (`hasPendingWrites` in the
 Firestore snapshot metadata) or *Offline* (no connection; writes are stored on the device and sent later).
+
+## Shortcuts and compact views
+
+A PWA on Android cannot offer real home screen widgets. Instead the app has **shortcuts** (long-press the icon on the home screen)
+and lightweight views that can also be opened as separate browser bookmarks:
+
+| Address | What it does |
+|---|---|
+| `./?action=arrive` | **Arrival** shortcut: records today's arrival at the current time with one tap and shows a confirmation with "Undo" |
+| `./?action=leave` | **Departure** shortcut: the same for the departure |
+| `./?view=compact` | **Compact overview** shortcut: only the Today card (arrival, plan, bank zeroing, countdown), the bank, the time field and the buttons, no navigation, ~360 px wide |
+| `./?view=quick` | only the time field and the Arrival / Departure buttons |
+
+- If today already has an arrival (or departure), the app asks before overwriting it. The record is written only after sign-in and loading the
+  data, and the `action` parameter is then removed from the address so that a reload does not repeat it.
+- The service worker caches these addresses (`SHELL` in `sw.js`, matched with `ignoreSearch` when the network is down), so they work offline;
+  the records are sent once online.
+- The shortcut names in the manifest are Czech (the manifest is not translated, see Language and holidays).
+
+### Adding to the home screen and shortcuts in Chrome on Android
+
+1. Open <https://luso999.github.io/Wibed-work-attendance/> in **Chrome** and sign in.
+2. Menu **⋮ → Add to home screen → Install** (or the "Install app" prompt at the bottom of the screen).
+3. On the home screen **long-press the Docházka icon** – the shortcuts **Příchod** (Arrival), **Odchod** (Departure) and **Kompaktní přehled** (Compact overview) appear.
+4. A shortcut can be dragged to the home screen as a separate icon (long-press and drag), so recording an arrival is a single tap.
+5. A lightweight view with just the buttons: open `…/Wibed-work-attendance/?view=quick` and add it via **⋮ → Add to home screen**
+   (this creates a bookmark that opens the app directly in this view).
+
+Shortcuts are read from `manifest.json` at install time; after a manifest change you sometimes need to uninstall and reinstall the app.
 
 ## Language and holidays
 

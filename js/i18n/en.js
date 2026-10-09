@@ -536,4 +536,6 @@ export default {
   'table.today': 'today',
   'table.actualLong': 'Actual',
   'table.weekHeader': 'Week {week} · {parity} · {from} – {to}',
+  // Shortcuts and compact views
+  'view.exit': 'Open the full app',
 };

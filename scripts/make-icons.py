@@ -80,6 +80,37 @@ def render(size, maskable=False, corner=0.22):
     return pixels
 
 
+GREEN = ((5, 150, 105), (4, 120, 87))     # emerald-600 → 700
+RED = ((225, 29, 72), (190, 18, 60))       # rose-600 → 700
+
+
+def render_arrow(size, left, colors):
+    """Ikona zkratky: šipka (→ příchod, ← odchod) na plném pozadí (Android ji ořízne do kruhu)."""
+    top, bottom = colors
+    pixels = bytearray(size * size * 4)
+    sign = -1 if left else 1
+    tip = (0.20 * sign, 0.0)
+    segments = [((-0.20 * sign, 0.0), tip), (tip, (0.03 * sign, -0.17)), (tip, (0.03 * sign, 0.17))]
+    hw = 0.05
+    for y in range(size):
+        for x in range(size):
+            fg_cov = 0
+            for sy in range(SS):
+                for sx in range(SS):
+                    px = (x + (sx + 0.5) / SS) / size - 0.5
+                    py = (y + (sy + 0.5) / SS) / size - 0.5
+                    if any(seg_dist(px, py, ax, ay, bx, by) <= hw for (ax, ay), (bx, by) in segments):
+                        fg_cov += 1
+            i = (y * size + x) * 4
+            t = y / (size - 1)
+            bg = [round(top[k] + (bottom[k] - top[k]) * t) for k in range(3)]
+            f = fg_cov / (SS * SS)
+            for k in range(3):
+                pixels[i + k] = round(bg[k] * (1 - f) + WHITE[k] * f)
+            pixels[i + 3] = 255
+    return pixels
+
+
 def main():
     OUT.mkdir(exist_ok=True)
     for name, size, maskable in [
@@ -89,6 +120,14 @@ def main():
         ('apple-touch-icon.png', 180, True),  # iOS si zaoblení dělá sám
     ]:
         png(OUT / name, size, render(size, maskable))
+        print('✔', OUT / name)
+    # ikony zkratek v manifestu (Příchod, Odchod, Kompaktní přehled)
+    for name, pixels in [
+        ('shortcut-arrive.png', render_arrow(96, False, GREEN)),
+        ('shortcut-leave.png', render_arrow(96, True, RED)),
+        ('shortcut-compact.png', render(96, True)),
+    ]:
+        png(OUT / name, 96, pixels)
         print('✔', OUT / name)
 
 
