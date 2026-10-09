@@ -27,6 +27,7 @@ HTML + Vanilla JS (ES moduly), Firebase (Authentication + Firestore), TailwindCS
 - **Čeština a angličtina** (výchozí je vždy čeština), přepínač v horní liště, na přihlašovací obrazovce a v nastavení; změna se projeví hned bez obnovení stránky.
 - **České státní svátky** lze vypnout (např. při práci v zahraničí) – pak se všechny výpočty chovají, jako by svátky neexistovaly.
 - **Ochrana historie:** změna denního fondu, přestávky nebo svátků ukáže před uložením dopad na banku a uzavřené dny.
+- **Úvodní průvodce** nastavením (7 kroků s příklady a živou ukázkou plánu); kdykoli ho spustí otazník v horní liště.
 - **Zkratky na ploše (Android):** Příchod, Odchod a Kompaktní přehled; úsporné pohledy `?view=compact` a `?view=quick` fungují i offline.
 - Tmavý a světlý režim (výchozí podle systému, volba se pamatuje), **PWA** (instalace na plochu, offline shell, offline data díky cache Firestore).
 
@@ -42,6 +43,7 @@ js/plan.js            čisté výpočty plánu měsíce (ISO týden, parita, roz
 js/i18n.js            překlady: t(), setLanguage(), formáty dat a čísel přes Intl
 js/i18n/cs.js, en.js  slovníky (klíč → text)
 js/plan-view.js       UI záložky Plán
+js/onboarding.js      úvodní průvodce nastavením
 js/csv.js             export CSV
 js/app.js             UI a logika obrazovek
 js/auth.js, js/store.js, js/firebase.js, js/theme.js, js/ui.js
@@ -243,6 +245,28 @@ plánovaného odchodu; obnovuje se každých 30 s.
 
 **Stav synchronizace:** ikona s popiskem v horní liště – *Uloženo* (vše je na serveru), *Čeká na odeslání* (`hasPendingWrites` v metadatech
 snapshotů Firestore) nebo *Offline* (bez připojení; zápisy se uloží v zařízení a odešlou později).
+
+## Úvodní průvodce
+
+Průvodce se otevře **automaticky** jen uživateli, který nemá **žádné** záznamy docházky a průvodce ještě nedokončil ani nepřeskočil
+(`settings/app.onboardingDone`). Existence záznamů se ověřuje **dotazem na server** (`getDocsFromServer`, ne cache); offline nebo při chybě
+se průvodce nezobrazí. **Ručně** ho kdykoli spustí otazník **?** v horní liště (tam je i odkaz na README podle jazyka).
+
+Kroky (Zpět / Další / Přeskočit, ukazatel kroků, ovládání klávesnicí, Escape = přeskočit):
+
+1. Uvítání a výběr jazyka (výchozí čeština); u jiného jazyka než češtiny otázka, zda vypnout české státní svátky (`czHolidays`).
+2. Pevný příchod (dopočítá se odchod), nebo pevný odchod, a jeho čas. **Příklady** s tlačítkem „Použít tento příklad“ předvyplní nastavení
+   (dál upravitelné): vyzvedávání dítěte ze školky v pevný čas v jiné dny podle týdne, dojíždění na pevný spoj (pevný odchod), běžná
+   pracovní doba bez pevných dnů.
+3. Denní fond a pravidlo přestávky s vysvětlením a výchozími hodnotami.
+4. Dny s pevným odchodem v lichém a sudém týdnu.
+5. Indikátor lichého/sudého týdne a jeho prohození.
+6. Jak zapisovat příchod/odchod a zkratky na Androidu.
+7. Hotovo s odkazem na Plán.
+
+U kroků s nastavením je živá ukázka plánu spočítaná funkcemi z `plan.js` (`samplePlan`) na vzorovém měsíci únor 2027 bez docházky.
+Nastavení se uloží až tlačítkem Hotovo; Přeskočit jen uloží `onboardingDone`. Má-li uživatel už docházku, změna fondu nebo přestávky
+z průvodce platí od dneška (starší dny se nepřepočítají).
 
 ## Zkratky a kompaktní pohledy
 

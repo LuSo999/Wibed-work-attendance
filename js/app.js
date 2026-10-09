@@ -13,6 +13,7 @@ import {
 import {
   initPlanView, renderPlanView, weekBadgeHtml, flipParity, renderImpact, scrollPlanToToday,
 } from './plan-view.js';
+import { initOnboarding, openOnboarding } from './onboarding.js';
 import {
   t, tr, setLanguage, getLanguage, storedLanguage, onLanguageChange, applyTranslations, LANGUAGES,
   formatMonthYear, weekdayShort,
@@ -156,13 +157,37 @@ function renderLanguage() {
  * Změna jazyka uživatelem (horní lišta, přihlášení, nastavení): uloží volbu
  * a u přihlášeného uživatele se zapnutými svátky se zeptá, zda je vypnout.
  */
-async function changeLanguage(lang) {
+async function changeLanguage(lang, { ask = true } = {}) {
   if (lang === getLanguage()) return;
   setLanguage(lang);
   if (!state.user) return;
-  store.saveAppSettings(state.user.uid, { language: lang })
+  saveApp({ language: lang });
+  if (ask) await askHolidays();
+}
+
+/** Uloží (sloučí) nastavení aplikace a hned ho promítne do stavu. */
+function saveApp(patch) {
+  state.app = { ...state.app, ...patch };
+  store.saveAppSettings(state.user.uid, patch)
     .catch((e) => toast(t('toast.saveFailed', { error: e.message }), 'error'));
-  await askHolidays();
+}
+
+/**
+ * Průvodce se sám otevře jen uživateli bez JAKÉKOLI docházky (ověřeno dotazem na server),
+ * který ho ještě nedokončil ani nepřeskočil. Offline nebo při chybě se nezobrazí.
+ * Vrací true, pokud se průvodce otevřel.
+ */
+async function maybeStartOnboarding() {
+  const uid = state.user?.uid;
+  if (!uid || VIEW || pendingAction || state.app.onboardingDone) return false;
+  try {
+    if (await store.hasAnyAttendanceOnServer(uid)) return false;
+  } catch {
+    return false;
+  }
+  if (state.user?.uid !== uid || state.app.onboardingDone || $('#dlg-onboarding').open) return false;
+  openOnboarding();
+  return true;
 }
 
 /** Po změně jazyka se překreslí vše bez reloadu. */
@@ -858,14 +883,16 @@ function onAppSettings({ exists, data, fromCache }) {
   if (prevHolidays !== state.app.czHolidays || !state.appLoaded) renderAll();
   if (fromCache || state.appLoaded) return;
   state.appLoaded = true;
-  if (!exists) {
-    // První přihlášení bez settings/app: uloží jazyk z prohlížeče a jednorázově
-    // se zeptá na svátky, pokud uživatel nepoužívá češtinu.
-    const lang = getLanguage();
-    store.saveAppSettings(state.user.uid, { language: lang, czHolidays: true })
-      .catch((e) => toast(t('toast.saveFailed', { error: e.message }), 'error'));
-    if (lang !== 'cs') askHolidays();
+  const firstLogin = !exists;
+  if (firstLogin) {
+    // První přihlášení bez settings/app: uloží jazyk z prohlížeče.
+    saveApp({ language: getLanguage(), czHolidays: true });
   }
+  // Průvodce (pro nové uživatele) se na svátky ptá sám; jinak se po prvním přihlášení
+  // v jiném jazyce než češtině zeptá jednorázový dotaz.
+  maybeStartOnboarding().then((shown) => {
+    if (!shown && firstLogin && getLanguage() !== 'cs') askHolidays();
+  });
 }
 
 function onUser(user) {
@@ -961,7 +988,23 @@ function bindAppEvents() {
     e.stopPropagation();
     $('#user-menu').hidden = !$('#user-menu').hidden;
   });
-  document.addEventListener('click', () => { $('#user-menu').hidden = true; });
+  $('#btn-help').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = $('#help-menu');
+    menu.hidden = !menu.hidden;
+    $('#btn-help').setAttribute('aria-expanded', String(!menu.hidden));
+  });
+  $('#btn-onboarding').addEventListener('click', () => openOnboarding());
+  document.addEventListener('click', () => {
+    $('#user-menu').hidden = true;
+    $('#help-menu').hidden = true;
+    $('#btn-help').setAttribute('aria-expanded', 'false');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    $('#user-menu').hidden = true;
+    $('#help-menu').hidden = true;
+  });
   $('#btn-logout').addEventListener('click', () => auth.logout());
 
   // Přehled
@@ -1113,6 +1156,20 @@ async function main() {
       .catch((e) => toast(t('toast.overrideDeleteFailed', { error: e.message }), 'error')),
     applyOverrides: (ops) => store.applyOverrides(state.user.uid, ops)
       .catch((e) => toast(t('toast.overridesFailed', { error: e.message }), 'error')),
+  });
+  initOnboarding({
+    getState: () => ({
+      settings: state.settings, records: records(), withdrawals: state.withdrawals, app: state.app,
+    }),
+    saveSettings: (s) => store.saveSettings(state.user.uid, s)
+      .catch((e) => toast(t('toast.settingsFailed', { error: e.message }), 'error')),
+    saveApp,
+    saveHolidays,
+    changeLanguage,
+    goToPlan() {
+      history.replaceState(null, '', `#${TABS.plan}`);
+      showTab('plan');
+    },
   });
   auth.watchUser(onUser);
 }

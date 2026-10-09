@@ -728,6 +728,43 @@ export function buildMonthPlan({ year, month, today, settings, records, override
 }
 
 // ---------------------------------------------------------------------------
+// Úvodní průvodce: příklady nastavení a ukázka plánu
+// ---------------------------------------------------------------------------
+
+/** Vzorový měsíc pro ukázku plánu: únor 2027 (20 pracovních dnů, bez svátků, 1. 2. je pondělí lichého týdne). */
+export const SAMPLE_MONTH = Object.freeze({ year: 2027, month: 2, today: '2027-02-01' });
+
+const emptyWeek = () => Object.fromEntries(WORKDAYS.map((d) => [d, { arriveAt: '', leaveAt: '' }]));
+const withLeave = (days, time) => ({ ...emptyWeek(), ...Object.fromEntries(days.map((d) => [d, { arriveAt: '', leaveAt: time }])) });
+
+/**
+ * Příklady pro průvodce („Použít tento příklad“). Mění kotvu, hranice a rozvrh,
+ * pravidla výpočtu (fond, přestávka) nechávají beze změny. Texty jsou ve slovnících (onboarding.example.*).
+ */
+export const SETTINGS_EXAMPLES = Object.freeze({
+  // vyzvedávání dítěte ze školky: pevný odchod 14:00, v lichém týdnu po + st, v sudém út + čt
+  kindergarten: { anchorMode: 'arrival', anchorTime: '06:00', schedule: { odd: withLeave([1, 3], '14:00'), even: withLeave([2, 4], '14:00') } },
+  // dojíždění na pevný spoj: každý den pevný odchod 15:10, příchod se dopočítá (nejdříve 05:30)
+  commute: { anchorMode: 'departure', anchorTime: '15:10', earliestArrival: '05:30', schedule: { odd: emptyWeek(), even: emptyWeek() } },
+  // běžná pracovní doba bez pevných dnů: příchod 07:00, odchod se dopočítá
+  regular: { anchorMode: 'arrival', anchorTime: '07:00', schedule: { odd: emptyWeek(), even: emptyWeek() } },
+});
+
+/** Nastavení po použití příkladu (pravidla výpočtu zůstávají). */
+export function applyExample(settings, key) {
+  const example = SETTINGS_EXAMPLES[key];
+  if (!example) return normalizeSettings(settings);
+  return normalizeSettings({ ...normalizeSettings(settings), ...example });
+}
+
+/** Ukázka plánu na vzorovém měsíci (bez docházky): prvních `days` pracovních dnů a souhrn. */
+export function samplePlan(settings, { days = 10 } = {}) {
+  const { year, month, today } = SAMPLE_MONTH;
+  const plan = buildMonthPlan({ year, month, today, settings, records: [], overrides: [] });
+  return { days: plan.days.filter((d) => d.workday).slice(0, days), summary: plan.summary, warnings: plan.warnings };
+}
+
+// ---------------------------------------------------------------------------
 // Karta „Dnes“: vynulování banky a postup dne
 // ---------------------------------------------------------------------------
 

@@ -37,7 +37,7 @@
     .tabular { font-variant-numeric: tabular-nums; }
     dialog::backdrop { background: rgb(15 23 42 / .55); backdrop-filter: blur(2px); }
     /* Spodní list na mobilu, modální okno od šířky 768 px */
-    dialog.sheet { max-height: 90vh; overflow-y: auto; }
+    dialog.sheet { max-height: 90vh; overflow-y: auto; scroll-padding-top: 7rem; scroll-padding-bottom: 5rem; }
     /* Kompaktní pohledy (?view=compact | ?view=quick, např. ze zkratky na ploše) */
     body.view-compact [data-hide-compact], body.view-quick [data-hide-quick] { display: none !important; }
     body.view-compact main, body.view-quick main { max-width: 360px; padding-bottom: 1.5rem; }
@@ -130,7 +130,7 @@
   <section id="screen-app" hidden>
     <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/85 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85" style="padding-top: env(safe-area-inset-top, 0px)">
       <div class="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
-        <span class="wordmark text-2xl" role="img" data-i18n-attr="aria-label:brand.name"><span data-i18n="brand.before"></span><svg class="wordmark-heart" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span data-i18n="brand.after"></span></span>
+        <span class="wordmark text-xl sm:text-2xl" role="img" data-i18n-attr="aria-label:brand.name"><span data-i18n="brand.before"></span><svg class="wordmark-heart" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span data-i18n="brand.after"></span></span>
         <nav class="ml-4 hidden gap-1 md:flex" data-i18n-attr="aria-label:nav.label" data-hide-compact data-hide-quick>
           <button data-tab="overview" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium" data-i18n="nav.overview"></button>
           <button data-tab="month" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium" data-i18n="nav.month"></button>
@@ -139,13 +139,19 @@
         </nav>
         <div class="ml-auto flex items-center gap-1">
           <span id="sync-status" class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" role="status" aria-live="polite"><span id="sync-icon" aria-hidden="true"></span><span id="sync-label" class="max-[349px]:sr-only"></span></span>
+          <div class="relative">
+            <button id="btn-help" type="button" class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-slate-600 ring-1 ring-slate-300 hover:bg-slate-100 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800" aria-haspopup="true" aria-expanded="false" aria-controls="help-menu" data-i18n-attr="title:help.title;aria-label:help.title">?</button>
+            <div id="help-menu" class="absolute right-0 z-30 mt-2 w-60 rounded-xl bg-white p-2 shadow-lg ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700" hidden>
+              <button id="btn-onboarding" type="button" class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-i18n="help.onboarding"></button>
+              <a data-readme-link target="_blank" rel="noopener" class="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-i18n="menu.help"></a>
+            </div>
+          </div>
           <button id="btn-lang" type="button" class="rounded-lg px-2 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"></button>
           <button id="btn-theme" type="button" class="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"></button>
           <div class="relative">
             <button id="btn-user" type="button" class="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-indigo-100 text-sm font-semibold text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300" aria-haspopup="true"></button>
             <div id="user-menu" class="absolute right-0 mt-2 w-60 rounded-xl bg-white p-2 shadow-lg ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700" hidden>
               <p id="user-email" class="truncate px-3 py-2 text-sm text-slate-500 dark:text-slate-400"></p>
-              <a data-readme-link target="_blank" rel="noopener" class="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-i18n="menu.help"></a>
               <button id="btn-logout" type="button" class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-i18n="menu.logout"></button>
             </div>
           </div>
@@ -454,6 +460,20 @@
             </fieldset>
             <p class="col-span-full text-xs text-slate-500 dark:text-slate-400" data-i18n="settings.autosave"></p>
           </form>
+    </div>
+  </dialog>
+
+  <!-- ===== Úvodní průvodce ===== -->
+  <dialog id="dlg-onboarding" class="sheet w-full max-w-xl rounded-2xl bg-slate-50 p-0 text-slate-900 shadow-xl dark:bg-slate-950 dark:text-slate-100" data-i18n-attr="aria-label:help.onboarding">
+    <div class="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-5 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+      <p id="ob-step-text" class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400" aria-live="polite"></p>
+      <ol id="ob-steps" class="mt-2 flex gap-1" data-i18n-attr="aria-label:onboarding.progress"></ol>
+    </div>
+    <div id="ob-body" class="px-5 py-4"></div>
+    <div class="sticky bottom-0 flex items-center gap-2 border-t border-slate-200 bg-white/95 px-5 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+      <button id="ob-skip" type="button" class="rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800" data-i18n="onboarding.skip"></button>
+      <button id="ob-back" type="button" class="ml-auto rounded-xl px-4 py-2.5 text-sm font-medium ring-1 ring-slate-300 hover:bg-slate-100 dark:ring-slate-700 dark:hover:bg-slate-800" data-i18n="onboarding.back"></button>
+      <button id="ob-next" type="button" class="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"></button>
     </div>
   </dialog>
 

@@ -42,7 +42,7 @@ test('množná čísla mají všechny tvary jazyka', () => {
 });
 
 /** Klíče použité v kódu a HTML (řetězce ve tvaru jmenný-prostor.klíč). */
-const NAMESPACES = 'app|brand|common|lang|theme|nav|menu|view|zero|progress|sync|setup|auth|type|parity|anchor|holiday|holidays|field|time|error|break|bank|entry|today|month|day|fill|week|schedule|settings|plan|summary|table|legend|tag|ov|bulk|rules|impact|csv|toast';
+const NAMESPACES = 'app|brand|common|lang|theme|nav|menu|help|onboarding|view|zero|progress|sync|setup|auth|type|parity|anchor|holiday|holidays|field|time|error|break|bank|entry|today|month|day|fill|week|schedule|settings|plan|summary|table|legend|tag|ov|bulk|rules|impact|csv|toast';
 const KEY_RE = new RegExp(`['"\`]((?:${NAMESPACES})\\.[A-Za-z0-9_.-]+?)['"\`]`, 'g');
 
 test('každý klíč použitý v kódu existuje ve slovnících', () => {
@@ -63,6 +63,9 @@ test('každý klíč použitý v kódu existuje ve slovnících', () => {
   for (const k of ['cs', 'en']) used.add(`lang.${k}`);
   for (const k of ['leaveNow', 'earlier', 'stay', 'even']) used.add(`zero.hint.${k}`);
   for (const k of ['saved', 'pending', 'offline']) used.add(`sync.${k}`).add(`sync.${k}Title`);
+  for (const k of ['welcome', 'anchor', 'rules', 'schedule', 'parity', 'record', 'done']) used.add(`onboarding.stepName.${k}`);
+  for (const k of ['kindergarten', 'commute', 'regular']) used.add(`onboarding.example.${k}.title`).add(`onboarding.example.${k}.text`);
+  for (const k of ['buttons', 'more', 'undo', 'today', 'shortcuts', 'offline']) used.add(`onboarding.record.${k}.title`).add(`onboarding.record.${k}.text`);
   const missing = [...used].filter((k) => /^[a-z]+\.[\w.-]+$/.test(k) && !(k in cs)).sort();
   assert.deepEqual(missing, []);
 });

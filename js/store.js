@@ -5,7 +5,7 @@
 //   users/{uid}/settings/app             – nastavení aplikace {language, czHolidays, onboardingDone}
 //   users/{uid}/planOverrides/{YYYY-MM-DD} – výjimky dnů pro plán
 import {
-  collection, doc, onSnapshot, setDoc, deleteDoc, addDoc, serverTimestamp, writeBatch,
+  collection, doc, onSnapshot, setDoc, deleteDoc, addDoc, serverTimestamp, writeBatch, getDocsFromServer, query, limit,
 } from 'https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js';
 import { db } from './firebase.js';
 
@@ -88,6 +88,15 @@ export function deleteWithdrawal(uid, id) {
 /** Uloží nastavení plánu. */
 export function saveSettings(uid, settings) {
   return setDoc(settingsDoc(uid), { ...settings, updatedAt: serverTimestamp() });
+}
+
+/**
+ * Má uživatel na SERVERU aspoň jeden záznam docházky? Dotaz jde vždy na server (ne do cache);
+ * offline nebo při chybě vyhodí výjimku – volající pak průvodce nezobrazí.
+ */
+export async function hasAnyAttendanceOnServer(uid) {
+  const snap = await getDocsFromServer(query(attendanceCol(uid), limit(1)));
+  return !snap.empty;
 }
 
 /** Uloží (sloučí) nastavení aplikace: jazyk, státní svátky, průvodce. */

@@ -27,6 +27,7 @@ HTML + vanilla JS (ES modules), Firebase (Authentication + Firestore), TailwindC
 - **Czech and English** (the default is always Czech), switch in the top bar, on the sign-in screen and in the settings; changes apply immediately without a reload.
 - **Czech public holidays** can be turned off (e.g. when working abroad) – all calculations then behave as if there were no holidays.
 - **History protection:** changing the daily hours, the break or the holidays shows the impact on the bank and closed days before saving.
+- **Setup wizard** (7 steps with examples and a live plan preview); the question mark in the top bar starts it any time.
 - **Home screen shortcuts (Android):** Arrival, Departure and Compact overview; the lightweight views `?view=compact` and `?view=quick` also work offline.
 - Dark and light theme (system default, the choice is remembered), **PWA** (install to home screen, offline shell, offline data thanks to the Firestore cache).
 
@@ -42,6 +43,7 @@ js/plan.js            pure monthly plan calculations (ISO week, parity, deficit 
 js/i18n.js            translations: t(), setLanguage(), date and number formats via Intl
 js/i18n/cs.js, en.js  dictionaries (key → text)
 js/plan-view.js       UI of the Plan tab
+js/onboarding.js      setup wizard
 js/csv.js             CSV export
 js/app.js             UI and screen logic
 js/auth.js, js/store.js, js/firebase.js, js/theme.js, js/ui.js
@@ -244,6 +246,29 @@ Undo restores the previous state of the day (or deletes the record if there was 
 
 **Sync status:** an icon with a label in the top bar – *Saved* (everything is on the server), *Waiting to send* (`hasPendingWrites` in the
 Firestore snapshot metadata) or *Offline* (no connection; writes are stored on the device and sent later).
+
+## Setup wizard
+
+The wizard opens **automatically** only for a user who has **no** attendance records and has not finished or skipped it yet
+(`settings/app.onboardingDone`). The existence of records is checked by **querying the server** (`getDocsFromServer`, not the cache); when
+offline or on an error the wizard is not shown. It can be started **manually** any time with the **?** in the top bar (which also links to
+the README in the current language).
+
+Steps (Back / Next / Skip, step indicator, keyboard operable, Escape = skip):
+
+1. Welcome and language choice (Czech by default); for a language other than Czech the question whether to turn off Czech public holidays (`czHolidays`).
+2. Fixed arrival (the departure is computed) or fixed departure, and its time. **Examples** with a "Use this example" button prefill the settings
+   (still editable): picking up a child from kindergarten at a fixed time on different days by week, commuting by a fixed train (fixed departure),
+   regular working hours without fixed days.
+3. Daily hours and the break rule with an explanation and default values.
+4. Days with a fixed departure in odd and even weeks.
+5. The odd/even week indicator and swapping it.
+6. How to record arrival/departure and the shortcuts on Android.
+7. Done, with a link to the Plan.
+
+Steps with settings show a live plan preview computed by `plan.js` (`samplePlan`) on the sample month February 2027 without attendance.
+The settings are saved only with Done; Skip only stores `onboardingDone`. If the user already has attendance, a change of daily hours or
+the break from the wizard applies from today (older days are not recalculated).
 
 ## Shortcuts and compact views
 

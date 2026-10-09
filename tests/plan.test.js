@@ -8,7 +8,7 @@ import {
   weekParity, scheduledLeave, workedForStay, stayForWorked, buildMonthPlan, fillRecord, fillCandidates,
   rulesFromSettings, switchAnchorMode, timeWarnings, validateOverride, bulkClearFixed, isEmptyOverride,
   applyRuleChange, ruleChangeImpact, isRuleChange, mergeClearFixed, RULES_SINCE_EVER, holidayChangeImpact,
-  CORE_WARNING_KEYS, canEditOverride, bankZeroing, dayProgress,
+  CORE_WARNING_KEYS, canEditOverride, bankZeroing, dayProgress, SETTINGS_EXAMPLES, applyExample, samplePlan,
 } from '../js/plan.js';
 import {
   dayResult, monthFund, configureHolidays, holidaysEnabled,
@@ -738,4 +738,29 @@ test('postup dne ke fondu a odpočet do odchodu', () => {
   assert.equal(late.remaining, -30);
   // částečná nepřítomnost zmenší cíl
   assert.equal(dayProgress({ date: '2027-02-01', settings: settings(), arrival: '06:00', now: 9 * H, absenceMinutes: 2 * H }).goal, 6 * H);
+});
+
+// ---------------------------------------------------------------------------
+// Úvodní průvodce: příklady a ukázka plánu
+// ---------------------------------------------------------------------------
+test('příklady průvodce: předvyplní kotvu a rozvrh, měsíc vyjde do fondu, pravidla zůstanou', () => {
+  const base = settings({ breakLengthMinutes: 45 });
+  const kid = applyExample(base, 'kindergarten');
+  assert.equal(kid.breakLengthMinutes, 45);                  // pravidla výpočtu beze změny
+  assert.equal(kid.schedule.odd[1].leaveAt, '14:00');
+  assert.equal(kid.schedule.even[2].leaveAt, '14:00');
+  assert.equal(kid.schedule.odd[2].leaveAt, '');
+  const k = samplePlan(kid);
+  assert.equal(k.days.length, 10);
+  assert.deepEqual(k.days.filter((d) => d.kind === 'fixed').map((d) => d.date), ['2027-02-01', '2027-02-03', '2027-02-09', '2027-02-11']);
+  assert.equal(k.summary.deviation, 0);
+  const commute = samplePlan(applyExample(settings(), 'commute'));
+  assert.ok(commute.days.every((d) => d.plannedLeave === '15:10' && d.flex === 'arrival'));
+  assert.equal(commute.days[0].arrival, '06:40');
+  assert.equal(commute.summary.deviation, 0);
+  const regular = samplePlan(applyExample(settings({ schedule: { odd: { 1: '13:00' } } }), 'regular'));
+  assert.ok(regular.days.every((d) => d.kind === 'regular' && d.arrival === '07:00' && d.plannedLeave === '15:30'));
+  // neznámý příklad nic nemění
+  assert.equal(applyExample(base, 'nic').anchorTime, base.anchorTime);
+  assert.ok(Object.keys(SETTINGS_EXAMPLES).length === 3);
 });
