@@ -10,7 +10,11 @@ HTML + vanilla JS (ES modules), Firebase (Authentication + Firestore), TailwindC
 
 ## Features
 
-- **Arrival / Departure** with one tap. The time is prefilled with the current time; it can be changed and you can record any past date.
+- **Arrival / Departure** with one tap (two separate buttons). The time is prefilled with the current time and can be changed; another date,
+  the day type, absence and note are in the collapsible **More** section. After recording, a short confirmation with an **Undo** link appears.
+- **"Today" card:** planned arrival and departure, **bank zeroing** (when to leave so that the bank balance is 0), progress of the day
+  towards the required hours with a countdown to departure, and the plan note.
+- **Sync status** in the top bar: saved / waiting to send / offline (from Firestore metadata).
 - **Rules:** 8 h per day. For every full 6 h of stay a 30 min break is deducted (`floor(stay / 6 h) * 30 min`).
   Every user can change the daily hours and the break in the settings.
 - **Day types:** Work, Vacation, Sick leave, Doctor (credit 8 h, no overtime) and Time off in lieu (credits 8 h and takes 8 h from the bank).
@@ -205,6 +209,31 @@ fixed working hours, a plan note, or to **clear a fixed time from the schedule**
 Stay = the smallest stay for (daily hours − absence), 8:30 for a regular day. In arrival mode (or with a recorded arrival)
 the departure is computed from the arrival, in departure mode the arrival is computed back from the departure.
 The record gets the "filled" tag, which also appears in the CSV. Editing the times manually removes the tag.
+
+## Main page (Overview)
+
+At the top there is the overtime bank and the **Today** card, below it the time field and the two buttons **Arrival** and **Departure**.
+Everything else (another date, day type, absence, note) is under **More**. When recording for a date other than today, a notice with a
+link back to today is shown above the buttons.
+
+**Bank zeroing** (`bankZeroing` in `plan.js`):
+
+- goal worked time of the day = daily hours − absence of the day − bank balance (without today's unfinished day, including withdrawals);
+  partial time off in lieu is drawn from the bank, so it is not subtracted from the goal,
+- departure = arrival + the smallest stay for the goal according to the break rule,
+- the arrival is the actual one, otherwise the planned one (marked "estimate"),
+- positive balance → earlier departure, negative → "stay until HH:MM", goal ≤ 0 → "you can leave right after arriving",
+- on a day with a fixed departure, "Bank after the planned departure: ±H:MM" is shown as well,
+- crossing the bounds (core time, latest departure) is only a warning.
+
+**Day progress** (`dayProgress`): worked time from the arrival until now (minus the break) out of the goal of daily hours − absence and a
+countdown to the planned departure; refreshed every 30 s.
+
+**Undo:** the confirmation of a record is a small notice at the bottom (takes no space) with an **Undo** link that disappears after 8 s.
+Undo restores the previous state of the day (or deletes the record if there was none).
+
+**Sync status:** an icon with a label in the top bar – *Saved* (everything is on the server), *Waiting to send* (`hasPendingWrites` in the
+Firestore snapshot metadata) or *Offline* (no connection; writes are stored on the device and sent later).
 
 ## Language and holidays
 

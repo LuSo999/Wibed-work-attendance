@@ -8,7 +8,7 @@ import {
 import { buildMonthCsv, downloadCsv } from './csv.js';
 import { enhanceTimeInputs, refreshTimeInputs } from './time24.js';
 import {
-  normalizeSettings, rulesFromSettings, buildMonthPlan, fillRecord, holidayChangeImpact,
+  normalizeSettings, rulesFromSettings, buildMonthPlan, fillRecord, holidayChangeImpact, bankZeroing, dayProgress,
 } from './plan.js';
 import {
   initPlanView, renderPlanView, weekBadgeHtml, flipParity, renderImpact,
@@ -37,6 +37,7 @@ const state = {
   overrides: new Map(), // 'YYYY-MM-DD' → výjimka dne pro plán
   month: { y: now.getFullYear(), m: now.getMonth() + 1 },
   timeTouched: false,
+  sync: { pending: false, fromCache: false }, // metadata Firestore
   unsubscribe: null,
 };
 let auth; // modul auth.js (načte se dynamicky)
@@ -275,6 +276,11 @@ function renderEntry() {
   $('#entry-work').hidden = !isWork;
   $('#entry-nonwork').hidden = isWork;
   $('#btn-save-type').textContent = t('entry.saveAs', { type: typeLabel(type) });
+  // jiné datum nebo typ dne se volí v „Více“; mimo něj je vidět, že se zapisuje jinam
+  const otherDate = date !== todayStr();
+  $('#entry-other-date').hidden = !otherDate;
+  $('#entry-other-date-text').textContent = otherDate ? t('entry.forDate', { date: formatDateLong(date) }) : '';
+  setError($('#entry-nonwork-hint'), isWork ? null : t('entry.nonworkHint', { type: typeLabel(type) }));
 
   const status = $('#entry-status');
   if (!record) {
@@ -351,9 +357,26 @@ async function onClock(kind) {
   const err = saveRecord(base);
   setError(errEl, err);
   if (err) return;
-  toast(t(kind === 'arrival' ? 'entry.arrivalSaved' : 'entry.departureSaved', { time }));
+  savedWithUndo(t(kind === 'arrival' ? 'entry.arrivalSaved' : 'entry.departureSaved', { time }), date, existing);
   state.timeTouched = false;
   refreshTime();
+}
+
+/** Nenápadné potvrzení zápisu s odkazem „Zpět“, který vrátí předchozí stav dne. */
+function savedWithUndo(message, date, previous) {
+  const before = previous ? { ...previous } : null;
+  toast(message, 'success', {
+    action: {
+      label: t('entry.undo'),
+      onClick() {
+        const uid = state.user?.uid;
+        if (!uid) return;
+        const op = before ? store.saveDay(uid, before) : store.deleteDay(uid, date);
+        op.catch((e) => toast(t('toast.saveFailed', { error: e.message }), 'error'));
+        toast(t('entry.undone'));
+      },
+    },
+  });
 }
 
 async function onSaveType() {
@@ -364,7 +387,7 @@ async function onSaveType() {
     && !(await confirmDialog(t('entry.overwriteTimes'), t('common.overwrite')))) return;
   const err = saveRecord({ date, type, note: existing?.note ?? '' });
   setError($('#entry-error'), err);
-  if (!err) toast(t('entry.savedType', { type: typeLabel(type) }));
+  if (!err) savedWithUndo(t('entry.savedType', { type: typeLabel(type) }), date, existing);
 }
 
 // ---------------------------------------------------------------------------
@@ -583,6 +606,91 @@ function renderTodayPlan() {
     title.textContent = t('today.cannotPlan');
     sub.textContent = tr(d.warnings[0]);
   }
+  renderZeroing(d);
+  renderProgress(d);
+}
+
+/** Vynulování banky: kdy dnes odejít, aby byl zůstatek banky 0. */
+function renderZeroing(d) {
+  const box = $('#today-zero');
+  const today = todayStr();
+  const rec = state.records.get(today);
+  const closed = rec && safeResult(rec)?.complete;
+  const arrival = rec?.arrival ?? (d && d.plannedWorked !== null && d.kind !== 'absence' ? d.arrival : null);
+  if (!d || closed || d.kind === 'absence' || !arrival) {
+    box.hidden = true;
+    return;
+  }
+  const balanceToday = balanceWithout(today);
+  const fixedLeave = d.kind === 'fixed' || d.explicitLeave ? d.plannedLeave : null;
+  const z = bankZeroing({
+    date: today,
+    settings: state.settings,
+    balance: balanceToday,
+    arrival,
+    estimated: !rec?.arrival,
+    absenceMinutes: d.absence ?? 0,
+    absenceType: d.absence ? d.type : null,
+    fixedLeave,
+  });
+  box.hidden = false;
+  $('#today-zero-title').textContent = !z.leave ? t('zero.impossible')
+    : z.status === 'leaveNow' ? t('zero.leaveNow')
+      : z.status === 'stay' ? t('zero.stayUntil', { time: z.leave })
+        : t('zero.leaveAt', { time: z.leave });
+  const hint = t(`zero.hint.${z.status}`);
+  $('#today-zero-sub').textContent = t('zero.sub', { balance: signed(balanceToday), target: formatMinutes(Math.max(0, z.target)), hint });
+  setError($('#today-zero-estimate'), z.estimated ? t('zero.estimate', { time: arrival }) : null);
+  const fixedEl = $('#today-zero-fixed');
+  fixedEl.hidden = z.bankAfterFixed === null;
+  if (z.bankAfterFixed !== null) {
+    fixedEl.textContent = t('zero.afterFixed', { time: fixedLeave, hours: signed(z.bankAfterFixed) });
+    fixedEl.className = `tabular mt-1 text-xs font-medium ${toneClass(z.bankAfterFixed)}`;
+  }
+  const warn = $('#today-zero-warnings');
+  warn.innerHTML = z.warnings.map((w) => `<li>⚠ ${escapeHtml(tr(w))}</li>`).join('');
+  warn.hidden = !z.warnings.length;
+}
+
+/** Postup dne ke fondu a odpočet do plánovaného odchodu (jen po příchodu, před odchodem). */
+function renderProgress(d) {
+  const box = $('#today-progress');
+  const today = todayStr();
+  const rec = state.records.get(today);
+  if (!d || !rec?.arrival || rec.departure) {
+    box.hidden = true;
+    return;
+  }
+  const p = dayProgress({
+    date: today, settings: state.settings, arrival: rec.arrival, now: parseTime(nowTime()), absenceMinutes: d.absence ?? 0, leave: d.plannedLeave,
+  });
+  box.hidden = false;
+  $('#today-progress-text').textContent = t('progress.worked', { worked: formatMinutes(p.worked), goal: formatMinutes(p.goal) });
+  $('#today-countdown').textContent = p.remaining === null ? ''
+    : p.remaining >= 0 ? t('progress.remaining', { time: formatMinutes(p.remaining) })
+      : t('progress.over', { time: formatMinutes(-p.remaining) });
+  $('#today-progress-fill').style.width = `${p.percent}%`;
+  $('#today-progress-bar').setAttribute('aria-valuenow', String(p.percent));
+  $('#today-progress-bar').setAttribute('aria-label', t('progress.label'));
+}
+
+// ---------------------------------------------------------------------------
+// Stav synchronizace (horní lišta)
+// ---------------------------------------------------------------------------
+const SYNC_STYLE = {
+  saved: { icon: '✓', cls: 'text-emerald-700 dark:text-emerald-400' },
+  pending: { icon: '↻', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300' },
+  offline: { icon: '⚠', cls: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
+};
+
+function renderSync() {
+  const status = !navigator.onLine ? 'offline' : state.sync.pending ? 'pending' : 'saved';
+  const el = $('#sync-status');
+  el.className = `inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${SYNC_STYLE[status].cls}`;
+  el.dataset.status = status;
+  el.title = t(`sync.${status}Title`);
+  $('#sync-icon').textContent = SYNC_STYLE[status].icon;
+  $('#sync-label').textContent = t(`sync.${status}`);
 }
 
 function usePlan() {
@@ -646,6 +754,7 @@ function renderAll() {
   renderPlanView();
   renderBankHistory();
   updateWithdrawForm();
+  renderSync();
   if ($('#dlg-day').open) updateDialog();
 }
 
@@ -778,6 +887,10 @@ function onUser(user) {
       renderAll();
     },
     onAppSettings,
+    onSync(sync) {
+      state.sync = sync;
+      renderSync();
+    },
     onError(err) {
       toast(err.code === 'permission-denied' ? t('toast.permissionDenied') : t('toast.dbError', { error: err.message }), 'error');
     },
@@ -838,11 +951,19 @@ function bindAppEvents() {
   $('#btn-departure').addEventListener('click', () => onClock('departure'));
   $('#btn-save-type').addEventListener('click', onSaveType);
   $('#btn-entry-edit').addEventListener('click', () => openDayDialog($('#entry-date').value));
+  $('#btn-entry-today').addEventListener('click', () => {
+    $('#entry-date').value = todayStr();
+    syncEntryType();
+    setError($('#entry-error'), null);
+    renderEntry();
+  });
   $('#btn-use-plan').addEventListener('click', usePlan);
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-flip-parity]')) flipParity();
   });
   setInterval(refreshTime, 15_000);
+  // odpočet a postup dne se obnovují průběžně
+  setInterval(() => { if (state.user) renderTodayPlan(); }, 30_000);
 
   // Měsíc
   $('#btn-month-prev').addEventListener('click', () => shiftMonth(-1));
@@ -910,11 +1031,10 @@ function bindAppEvents() {
     toast(t('bank.deleted'));
   });
 
-  // Offline indikátor
-  const updateOnline = () => { $('#offline-badge').hidden = navigator.onLine; };
-  window.addEventListener('online', updateOnline);
-  window.addEventListener('offline', updateOnline);
-  updateOnline();
+  // Stav synchronizace: připojení + metadata Firestore
+  window.addEventListener('online', renderSync);
+  window.addEventListener('offline', renderSync);
+  renderSync();
 }
 
 // ---------------------------------------------------------------------------

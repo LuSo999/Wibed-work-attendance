@@ -46,7 +46,6 @@ export default {
   'nav.bank': 'Banka',
   'menu.help': 'Nápověda (README)',
   'menu.logout': 'Odhlásit se',
-  'status.offline': 'Offline',
 
   // Chybějící konfigurace
   'setup.title': 'Chybí konfigurace Firebase',
@@ -506,4 +505,38 @@ export default {
   'toast.permissionDenied': 'Přístup k datům odepřen – zkontrolujte nasazení firestore.rules.',
   'toast.dbError': 'Chyba databáze: {error}',
   'toast.savedCheckWarnings': 'Uloženo – zkontrolujte upozornění',
+  // Přehled – „Více“ a jiné datum
+  'entry.more': 'Více (jiné datum, typ dne, nepřítomnost, poznámka)',
+  'entry.otherDate': 'Jiné datum',
+  'entry.forDate': 'Zápis pro {date}',
+  'entry.backToToday': 'Zpět na dnešek',
+  'entry.nonworkHint': 'Vybraný typ dne: {type} – uložte ho v části „Více“.',
+  'entry.undone': 'Vráceno',
+  'entry.undo': 'Zpět',
+
+  // Vynulování banky a postup dne
+  'zero.leaveAt': 'Vynulování banky: odchod v {time}',
+  'zero.stayUntil': 'Vynulování banky: zůstaň do {time}',
+  'zero.leaveNow': 'Vynulování banky: můžeš odejít hned po příchodu',
+  'zero.impossible': 'Vynulování banky dnes nestihneš (odchod by byl po půlnoci)',
+  'zero.sub': 'Banka {balance} h · cíl {target} h práce · {hint}',
+  'zero.hint.earlier': 'odejdeš dřív než obvykle',
+  'zero.hint.stay': 'je potřeba napracovat',
+  'zero.hint.even': 'banka je vyrovnaná',
+  'zero.hint.leaveNow': 'banka pokryje celý den',
+  'zero.hint.noArrival': 'chybí příchod',
+  'zero.estimate': 'odhad – příchod {time} podle plánu',
+  'zero.afterFixed': 'Banka po plánovaném odchodu v {time}: {hours} h',
+  'progress.label': 'Postup dne ke fondu',
+  'progress.worked': 'Odpracováno {worked} / {goal} h',
+  'progress.remaining': 'do odchodu {time}',
+  'progress.over': 'po plánovaném odchodu o {time}',
+
+  // Stav synchronizace
+  'sync.saved': 'Uloženo',
+  'sync.pending': 'Čeká na odeslání',
+  'sync.offline': 'Offline',
+  'sync.savedTitle': 'Všechny změny jsou uložené na serveru.',
+  'sync.pendingTitle': 'Změny jsou uložené v zařízení a čekají na odeslání na server.',
+  'sync.offlineTitle': 'Bez připojení – změny se uloží v zařízení a odešlou se po připojení.',
 };

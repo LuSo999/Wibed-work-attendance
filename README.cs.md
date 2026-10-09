@@ -10,7 +10,11 @@ HTML + Vanilla JS (ES moduly), Firebase (Authentication + Firestore), TailwindCS
 
 ## Funkce
 
-- **Příchod / Odchod** jedním klepnutím. Čas se předvyplní aktuálním, lze ho změnit a zapisovat i zpětně pro libovolné datum.
+- **Příchod / Odchod** jedním klepnutím (dvě samostatná tlačítka). Čas se předvyplní aktuálním, lze ho změnit; jiné datum, typ dne,
+  nepřítomnost a poznámka jsou v rozbalovací části **Více**. Po zápisu se krátce ukáže potvrzení s odkazem **Zpět**.
+- **Karta „Dnes“:** plánovaný příchod a odchod, **vynulování banky** (kdy odejít, aby byl zůstatek banky 0), postup dne ke fondu
+  s odpočtem „do odchodu“ a poznámka k plánu.
+- **Stav synchronizace** v horní liště: uloženo / čeká na odeslání / offline (podle metadat Firestore).
 - **Pravidla:** fond 8 h/den. Za každých celých 6 h pobytu se odečte 30 min přestávky (`floor(pobyt / 6 h) * 30 min`).
   Fond i přestávku si každý uživatel může změnit v nastavení.
 - **Typy dnů:** Pracovní, Dovolená, Nemoc, Lékař (započtou 8 h, netvoří přesčas) a Náhradní volno (započte 8 h a odečte 8 h z banky).
@@ -205,6 +209,30 @@ pevné hodiny práce, poznámku k plánu, nebo **zrušíte pevný čas z rozvrhu
 Pobyt = nejmenší pobyt pro (fond − nepřítomnost), u běžného dne 8:30. V režimu příchodu (nebo při zaznamenaném příchodu)
 se odchod dopočítá od příchodu, v režimu odchodu se příchod dopočítá zpět od odchodu.
 Záznam dostane štítek „doplněno“, který se zobrazí i v CSV. Ruční úprava časů štítek zruší.
+
+## Hlavní stránka (Přehled)
+
+Nahoře je banka přesčasů a karta **Dnes**, pod ní pole času a dvě tlačítka **Příchod** a **Odchod**. Ostatní (jiné datum, typ dne,
+nepřítomnost, poznámka) je pod **Více**. Při zápisu pro jiné datum než dnešek je nad tlačítky vidět upozornění s odkazem zpět na dnešek.
+
+**Vynulování banky** (`bankZeroing` v `plan.js`):
+
+- cílová odpracovaná doba dne = denní fond − nepřítomnost dne − zůstatek banky (bez dnešního rozpracovaného dne, včetně výběrů);
+  u částečného náhradního volna se jeho hodiny čerpají z banky, proto se od cíle neodečítají,
+- odchod = příchod + nejmenší pobyt pro cílovou dobu podle pravidel přestávky,
+- příchod je skutečný, jinak plánovaný (označený „odhad“),
+- kladný zůstatek → dřívější odchod, záporný → „zůstaň do HH:MM“, cíl ≤ 0 → „můžeš odejít hned po příchodu“,
+- v den s pevným odchodem se navíc ukáže „Banka po plánovaném odchodu: ±H:MM“,
+- překročení hranic (pevná doba, nejpozdější odchod) je jen upozornění.
+
+**Postup dne** (`dayProgress`): odpracováno od příchodu do teď (po odečtení přestávky) z cíle fond − nepřítomnost a odpočet do
+plánovaného odchodu; obnovuje se každých 30 s.
+
+**Zpět:** potvrzení zápisu je malé oznámení dole (nezabírá místo) s odkazem **Zpět**, které po 8 s zmizí. Zpět vrátí předchozí stav dne
+(nebo záznam smaže, pokud předtím neexistoval).
+
+**Stav synchronizace:** ikona s popiskem v horní liště – *Uloženo* (vše je na serveru), *Čeká na odeslání* (`hasPendingWrites` v metadatech
+snapshotů Firestore) nebo *Offline* (bez připojení; zápisy se uloží v zařízení a odešlou později).
 
 ## Jazyk a svátky
 

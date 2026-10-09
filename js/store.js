@@ -20,8 +20,15 @@ const appSettingsDoc = (uid) => doc(db, 'users', uid, 'settings', 'app');
  * Vrací funkci pro odhlášení odběru.
  */
 export function subscribe(uid, {
-  onAttendance, onBank, onSettings, onOverrides, onAppSettings, onError,
+  onAttendance, onBank, onSettings, onOverrides, onAppSettings, onSync, onError,
 }) {
+  // Stav synchronizace z metadat: čekající zápisy (hasPendingWrites) a data jen z cache (fromCache).
+  const sync = new Map();
+  const watchSync = (name, ref) => onSnapshot(ref, { includeMetadataChanges: true }, (snap) => {
+    sync.set(name, snap.metadata);
+    const all = [...sync.values()];
+    onSync?.({ pending: all.some((m) => m.hasPendingWrites), fromCache: all.some((m) => m.fromCache) });
+  }, onError);
   const unsubs = [
     onSnapshot(attendanceCol(uid), (snap) => {
       onAttendance(snap.docs.map((d) => ({ ...d.data(), date: d.id })));
@@ -39,6 +46,10 @@ export function subscribe(uid, {
     onSnapshot(appSettingsDoc(uid), { includeMetadataChanges: true }, (snap) => {
       onAppSettings({ exists: snap.exists(), data: snap.exists() ? snap.data() : {}, fromCache: snap.metadata.fromCache });
     }, onError),
+    watchSync('attendance', attendanceCol(uid)),
+    watchSync('bank', bankCol(uid)),
+    watchSync('overrides', overridesCol(uid)),
+    watchSync('settings', settingsDoc(uid)),
   ];
   return () => unsubs.forEach((u) => u());
 }

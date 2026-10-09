@@ -8,7 +8,7 @@ import {
   weekParity, scheduledLeave, workedForStay, stayForWorked, buildMonthPlan, fillRecord, fillCandidates,
   rulesFromSettings, switchAnchorMode, timeWarnings, validateOverride, bulkClearFixed, isEmptyOverride,
   applyRuleChange, ruleChangeImpact, isRuleChange, mergeClearFixed, RULES_SINCE_EVER, holidayChangeImpact,
-  CORE_WARNING_KEYS, canEditOverride,
+  CORE_WARNING_KEYS, canEditOverride, bankZeroing, dayProgress,
 } from '../js/plan.js';
 import {
   dayResult, monthFund, configureHolidays, holidaysEnabled,
@@ -650,4 +650,92 @@ test('výjimku lze nastavit jen dnešnímu a budoucímu pracovnímu dni bez uzav
   const p2 = plan({ today: '2027-02-03', records: [work('2027-02-03', '06:10', null)] });
   assert.equal(canEditOverride(day(p2, '2027-02-03'), '2027-02-03'), true);
   assert.equal(canEditOverride(undefined, '2027-02-03'), false);
+});
+
+// ---------------------------------------------------------------------------
+// Karta „Dnes“: vynulování banky a postup dne (pondělí 1. 2. 2027, fond 8 h)
+// ---------------------------------------------------------------------------
+const zero = (patch) => bankZeroing({ date: '2027-02-01', settings: settings(), arrival: '06:00', balance: 0, ...patch });
+
+test('vynulování banky: kladná, záporná a nulová banka', () => {
+  const plus = zero({ balance: 60 });                   // cíl 7:00 → pobyt 7:30
+  assert.equal(plus.target, 7 * H);
+  assert.equal(plus.leave, '13:30');
+  assert.equal(plus.status, 'earlier');
+  assert.deepEqual(keys(plus.warnings), ['plan.warn.leaveBeforeCore']); // jen upozornění
+  const minus = zero({ balance: -90 });                 // cíl 9:30 → pobyt 10:00
+  assert.equal(minus.leave, '16:00');
+  assert.equal(minus.status, 'stay');
+  assert.deepEqual(minus.warnings, []);
+  const even = zero({ balance: 0 });
+  assert.equal(even.leave, '14:30');
+  assert.equal(even.status, 'even');
+  // banka pokryje celý den → odejít hned po příchodu
+  const all = zero({ balance: 9 * H });
+  assert.equal(all.status, 'leaveNow');
+  assert.equal(all.leave, '06:00');
+  assert.ok(all.target <= 0);
+});
+
+test('vynulování banky: hranice přestávky a hranice plánovače', () => {
+  assert.equal(zero({ balance: 2.5 * H }).leave, '11:30');      // 5:30 práce = 5:30 pobytu
+  assert.equal(zero({ balance: 2 * H + 1 }).leave, '11:59');    // 5:59 práce, bez přestávky
+  assert.equal(zero({ balance: 2 * H }).leave, '12:30');        // 6:00 práce → 6:30 pobytu
+  // za nejpozdějším odchodem jen upozornění
+  const late = zero({ balance: -3 * H });                       // 11:00 práce → 11:30 pobytu
+  assert.equal(late.leave, '17:30');
+  assert.deepEqual(keys(late.warnings), ['plan.warn.afterLatest']);
+  // po půlnoci odchod nelze
+  const night = zero({ arrival: '20:00', balance: -2 * H });
+  assert.equal(night.leave, null);
+  assert.deepEqual(keys(night.warnings), ['plan.warn.leaveAfterMidnight']);
+  // vlastní pravidlo přestávky (45 min po 6 h)
+  const r45 = bankZeroing({ date: '2027-02-01', settings: settings({ breakLengthMinutes: 45 }), arrival: '06:00', balance: 0 });
+  assert.equal(r45.leave, '14:45');
+});
+
+test('vynulování banky: částečná nepřítomnost a náhradní volno', () => {
+  const doctor = zero({ absenceMinutes: 2 * H, absenceType: 'doctor', balance: 30 }); // 8 − 2 − 0:30 = 5:30
+  assert.equal(doctor.target, 5.5 * H);
+  assert.equal(doctor.leave, '11:30');
+  // částečné náhradní volno se čerpá z banky, cíl se o něj nesnižuje
+  const comp = zero({ absenceMinutes: 2 * H, absenceType: 'comp', balance: 0 });
+  assert.equal(comp.target, 8 * H);
+  assert.equal(comp.leave, '14:30');
+});
+
+test('vynulování banky: pevný odchod ukáže banku po plánovaném odchodu', () => {
+  const z = zero({ balance: 60, fixedLeave: '14:00' });         // 7:30 práce → +1:00 − 0:30
+  assert.equal(z.bankAfterFixed, 30);
+  assert.equal(z.leave, '13:30');
+  assert.equal(zero({ balance: -60, fixedLeave: '14:30' }).bankAfterFixed, -60);
+  assert.equal(zero({ balance: 0 }).bankAfterFixed, null);
+  // s částečnou nepřítomností: 09:00–13:30 = 4:30 práce + 3 h lékař → −0:30
+  assert.equal(zero({ arrival: '09:00', absenceMinutes: 3 * H, absenceType: 'doctor', fixedLeave: '13:30' }).bankAfterFixed, -30);
+});
+
+test('vynulování banky: chybějící příchod a odhad podle plánu', () => {
+  const none = zero({ arrival: null, balance: 60 });
+  assert.equal(none.status, 'noArrival');
+  assert.equal(none.leave, null);
+  assert.equal(none.estimated, false);
+  const est = zero({ arrival: '06:30', estimated: true, balance: 0 });
+  assert.equal(est.estimated, true);
+  assert.equal(est.leave, '15:00');
+  // víkend: fond 0 → kladná banka = odejít hned, záporná = napracovat
+  const sat = bankZeroing({ date: '2027-02-06', settings: settings(), arrival: '08:00', balance: -60 });
+  assert.equal(sat.fund, 0);
+  assert.equal(sat.leave, '09:00');
+});
+
+test('postup dne ke fondu a odpočet do odchodu', () => {
+  const p = dayProgress({ date: '2027-02-01', settings: settings(), arrival: '06:00', now: 9 * H, leave: '14:30' });
+  assert.deepEqual(p, { worked: 3 * H, goal: 8 * H, percent: 38, remaining: 5.5 * H });
+  // po 6 h pobytu se odečte přestávka; po plánovaném odchodu je odpočet záporný
+  assert.equal(dayProgress({ date: '2027-02-01', settings: settings(), arrival: '06:00', now: 12 * H }).worked, 5.5 * H);
+  const late = dayProgress({ date: '2027-02-01', settings: settings(), arrival: '06:00', now: 15 * H, leave: '14:30' });
+  assert.equal(late.percent, 100);
+  assert.equal(late.remaining, -30);
+  // částečná nepřítomnost zmenší cíl
+  assert.equal(dayProgress({ date: '2027-02-01', settings: settings(), arrival: '06:00', now: 9 * H, absenceMinutes: 2 * H }).goal, 6 * H);
 });

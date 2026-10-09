@@ -11,7 +11,7 @@
 import {
   DAY_TYPES, isAbsenceType, breakMinutes, parseTime, toTimeString, parseDate, daysInMonth,
   toDateString, isWorkday, holidayName, weekday, monthFund, safeDayResult, hoursToMinutes,
-  formatMinutes, rulesForDate, bankBalance, configureHolidays, holidaysEnabled,
+  formatMinutes, rulesForDate, bankBalance, configureHolidays, holidaysEnabled, dayFund,
 } from './calc.js';
 
 /** Krok rozložení deficitu. */
@@ -725,6 +725,75 @@ export function buildMonthPlan({ year, month, today, settings, records, override
       missingDays: missing,
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Karta „Dnes“: vynulování banky a postup dne
+// ---------------------------------------------------------------------------
+
+/**
+ * Odchod, při kterém dnešní den vynuluje banku přesčasů.
+ *
+ * Cílová odpracovaná doba = denní fond − nepřítomnost dne − zůstatek banky (bez dnešního
+ * rozpracovaného dne, včetně výběrů); u náhradního volna se jeho hodiny čerpají z banky,
+ * proto se od cíle neodečítají. Odchod = příchod + stayForWorked(cíl).
+ * Příchod je skutečný, jinak plánovaný (estimated = odhad). Překročení hranic je jen varování.
+ *
+ * @param {object} p
+ * @param {string} p.date            'YYYY-MM-DD'
+ * @param {object} p.settings        nastavení plánu (pravidla a hranice)
+ * @param {number} p.balance         zůstatek banky v minutách bez dnešního dne
+ * @param {string|null} p.arrival    příchod 'HH:MM' (skutečný nebo plánovaný)
+ * @param {boolean} [p.estimated]    příchod je jen plánovaný
+ * @param {number} [p.absenceMinutes] částečná nepřítomnost dne
+ * @param {string|null} [p.absenceType] typ nepřítomnosti (u 'comp' se hodiny čerpají z banky)
+ * @param {string|null} [p.fixedLeave] pevný plánovaný odchod dne → spočítá i banku po něm
+ * @returns {{fund, target, arrival, estimated, leave: string|null,
+ *   status: 'noArrival'|'leaveNow'|'earlier'|'stay'|'even', bankAfterFixed: number|null, warnings: Array}}
+ */
+export function bankZeroing({
+  date, settings, balance, arrival = null, estimated = false, absenceMinutes = 0, absenceType = null, fixedLeave = null,
+}) {
+  const s = normalizeSettings(settings);
+  const rules = rulesForDate(rulesFromSettings(s), date);
+  const fund = dayFund(date, rules);
+  const drawn = absenceType === DAY_TYPES.COMP ? absenceMinutes : 0;
+  const target = fund - absenceMinutes + drawn - balance;
+  const arr = arrival ? parseTime(arrival) : null;
+  const result = {
+    fund, target, arrival: arr === null ? null : arrival, estimated: Boolean(estimated) && arr !== null, leave: null, status: 'noArrival', bankAfterFixed: null, warnings: [],
+  };
+  if (arr === null) return result;
+  const leave = target <= 0 ? arr : arr + stayForWorked(target, rules);
+  result.status = target <= 0 ? 'leaveNow' : balance > 0 ? 'earlier' : balance < 0 ? 'stay' : 'even';
+  if (leave > 1439) {
+    result.warnings.push(msg('plan.warn.leaveAfterMidnight'));
+  } else {
+    result.leave = toTimeString(leave);
+    result.warnings.push(...timeWarnings(null, leave, s));
+  }
+  const fixed = fixedLeave ? parseTime(fixedLeave) : null;
+  if (fixed !== null) {
+    const worked = workedForStay(Math.max(0, fixed - arr), rules);
+    result.bankAfterFixed = balance + worked + absenceMinutes - drawn - fund;
+  }
+  return result;
+}
+
+/**
+ * Postup dne ke fondu: odpracováno od příchodu do teď (po odečtení přestávky),
+ * podíl z cíle (fond − nepřítomnost) a zbývající čas do plánovaného odchodu.
+ * @param {object} p { date, settings, arrival 'HH:MM', now (minuty od půlnoci), absenceMinutes, leave 'HH:MM'|null }
+ * @returns {{worked, goal, percent, remaining: number|null}} remaining < 0 = po plánovaném odchodu
+ */
+export function dayProgress({ date, settings, arrival, now, absenceMinutes = 0, leave = null }) {
+  const rules = rulesForDate(rulesFromSettings(normalizeSettings(settings)), date);
+  const arr = parseTime(arrival);
+  const worked = arr === null ? 0 : workedForStay(Math.max(0, now - arr), rules);
+  const goal = Math.max(0, dayFund(date, rules) - absenceMinutes);
+  const percent = goal > 0 ? Math.min(100, Math.round((worked / goal) * 100)) : 100;
+  const lv = leave ? parseTime(leave) : null;
+  return { worked, goal, percent, remaining: lv === null ? null : lv - now };
 }
 
 // ---------------------------------------------------------------------------

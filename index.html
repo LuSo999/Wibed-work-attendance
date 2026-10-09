@@ -124,7 +124,7 @@
           <button data-tab="bank" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium" data-i18n="nav.bank"></button>
         </nav>
         <div class="ml-auto flex items-center gap-1">
-          <span id="offline-badge" class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/50 dark:text-amber-300" hidden data-i18n="status.offline"></span>
+          <span id="sync-status" class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" role="status" aria-live="polite"><span id="sync-icon" aria-hidden="true"></span><span id="sync-label"></span></span>
           <button id="btn-lang" type="button" class="rounded-lg px-2 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"></button>
           <button id="btn-theme" type="button" class="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"></button>
           <div class="relative">
@@ -153,29 +153,33 @@
           </div>
         </div>
 
-        <div id="today-plan" class="flex flex-wrap items-center gap-3 rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-          <div class="min-w-0 flex-1">
-            <p id="today-plan-title" class="font-semibold"></p>
-            <p id="today-plan-sub" class="text-sm text-slate-500 dark:text-slate-400"></p>
-            <p id="today-plan-note" class="mt-1 text-sm text-amber-800 dark:text-amber-300" hidden></p>
+        <div id="today-plan" class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="min-w-0 flex-1">
+              <p id="today-plan-title" class="font-semibold"></p>
+              <p id="today-plan-sub" class="text-sm text-slate-500 dark:text-slate-400"></p>
+            </div>
+            <button id="btn-use-plan" type="button" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700" data-i18n="today.usePlan"></button>
           </div>
-          <button id="btn-use-plan" type="button" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700" data-i18n="today.usePlan"></button>
+          <div id="today-zero" class="mt-3 rounded-xl bg-slate-50 px-3 py-2.5 text-sm dark:bg-slate-800/60" hidden>
+            <p class="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold"><span id="today-zero-title"></span><span id="today-zero-estimate" class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-900/60 dark:text-amber-200" hidden></span></p>
+            <p id="today-zero-sub" class="text-xs text-slate-500 dark:text-slate-400"></p>
+            <p id="today-zero-fixed" class="tabular mt-1 text-xs font-medium" hidden></p>
+            <ul id="today-zero-warnings" class="mt-1 space-y-0.5 text-xs text-amber-700 dark:text-amber-400" hidden></ul>
+          </div>
+          <div id="today-progress" class="mt-3" hidden>
+            <div class="flex justify-between gap-2 text-xs text-slate-500 dark:text-slate-400"><span id="today-progress-text" class="tabular"></span><span id="today-countdown" class="tabular font-medium text-slate-700 dark:text-slate-200"></span></div>
+            <div class="mt-1 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="today-progress-bar"><div id="today-progress-fill" class="h-full rounded-full bg-emerald-500 transition-all" style="width:0"></div></div>
+          </div>
+          <p id="today-plan-note" class="mt-2 text-sm text-amber-800 dark:text-amber-300" hidden></p>
         </div>
 
         <div class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-          <div class="flex flex-wrap items-end gap-3">
-            <label class="block flex-1 min-w-[9rem]">
-              <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.date"></span>
-              <input id="entry-date" type="date" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
-            </label>
-            <label class="block flex-1 min-w-[9rem]">
-              <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.dayType"></span>
-              <select id="entry-type" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></select>
-            </label>
-          </div>
-          <p id="entry-day-info" class="mt-2 text-sm text-slate-500 dark:text-slate-400"></p>
-
-          <div id="entry-work" class="mt-4">
+          <p id="entry-other-date" class="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" hidden>
+            <span id="entry-other-date-text"></span>
+            <button id="btn-entry-today" type="button" class="font-semibold underline" data-i18n="entry.backToToday"></button>
+          </p>
+          <div id="entry-work">
             <label class="block">
               <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.time"></span>
               <div class="mt-1 flex gap-2">
@@ -192,13 +196,31 @@
               </button>
             </div>
           </div>
-          <div id="entry-nonwork" class="mt-4" hidden>
-            <button id="btn-save-type" type="button" class="w-full rounded-2xl bg-indigo-600 px-4 py-4 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"></button>
-          </div>
+          <p id="entry-nonwork-hint" class="text-sm text-slate-600 dark:text-slate-300" hidden></p>
           <p id="entry-error" class="mt-3 text-sm text-red-600 dark:text-red-400" hidden></p>
 
-          <div id="entry-status" class="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-sm sm:grid-cols-4 dark:border-slate-800"></div>
-          <button id="btn-entry-edit" type="button" class="mt-3 text-sm text-indigo-600 hover:underline dark:text-indigo-400" data-i18n="entry.editDetail"></button>
+          <div id="entry-status" class="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-sm sm:grid-cols-4 dark:border-slate-800"></div>
+
+          <details id="entry-more" class="mt-3 border-t border-slate-100 pt-2 dark:border-slate-800">
+            <summary class="cursor-pointer select-none py-1.5 text-sm font-medium text-indigo-600 dark:text-indigo-400" data-i18n="entry.more"></summary>
+            <div class="mt-2 space-y-3">
+              <div class="flex flex-wrap items-end gap-3">
+                <label class="block min-w-[9rem] flex-1">
+                  <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="entry.otherDate"></span>
+                  <input id="entry-date" type="date" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                </label>
+                <label class="block min-w-[9rem] flex-1">
+                  <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.dayType"></span>
+                  <select id="entry-type" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></select>
+                </label>
+              </div>
+              <p id="entry-day-info" class="text-sm text-slate-500 dark:text-slate-400"></p>
+              <div id="entry-nonwork" hidden>
+                <button id="btn-save-type" type="button" class="w-full rounded-2xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"></button>
+              </div>
+              <button id="btn-entry-edit" type="button" class="text-sm text-indigo-600 hover:underline dark:text-indigo-400" data-i18n="entry.editDetail"></button>
+            </div>
+          </details>
         </div>
       </div>
 

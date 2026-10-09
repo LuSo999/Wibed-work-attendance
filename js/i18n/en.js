@@ -46,7 +46,6 @@ export default {
   'nav.bank': 'Bank',
   'menu.help': 'Help (README)',
   'menu.logout': 'Sign out',
-  'status.offline': 'Offline',
 
   // Missing configuration
   'setup.title': 'Firebase configuration missing',
@@ -494,4 +493,38 @@ export default {
   'toast.permissionDenied': 'Access to data denied – check that firestore.rules are deployed.',
   'toast.dbError': 'Database error: {error}',
   'toast.savedCheckWarnings': 'Saved – check the warnings',
+  // Overview – "More" and another date
+  'entry.more': 'More (other date, day type, absence, note)',
+  'entry.otherDate': 'Other date',
+  'entry.forDate': 'Recording for {date}',
+  'entry.backToToday': 'Back to today',
+  'entry.nonworkHint': 'Selected day type: {type} – save it under “More”.',
+  'entry.undone': 'Undone',
+  'entry.undo': 'Undo',
+
+  // Bank zeroing and day progress
+  'zero.leaveAt': 'Zero the bank: leave at {time}',
+  'zero.stayUntil': 'Zero the bank: stay until {time}',
+  'zero.leaveNow': 'Zero the bank: you can leave right after arriving',
+  'zero.impossible': 'The bank cannot be zeroed today (departure would be after midnight)',
+  'zero.sub': 'Bank {balance} h · goal {target} h of work · {hint}',
+  'zero.hint.earlier': 'you leave earlier than usual',
+  'zero.hint.stay': 'hours need to be made up',
+  'zero.hint.even': 'the bank is balanced',
+  'zero.hint.leaveNow': 'the bank covers the whole day',
+  'zero.hint.noArrival': 'arrival missing',
+  'zero.estimate': 'estimate – arrival {time} from the plan',
+  'zero.afterFixed': 'Bank after the planned departure at {time}: {hours} h',
+  'progress.label': 'Progress of the day towards the required hours',
+  'progress.worked': 'Worked {worked} / {goal} h',
+  'progress.remaining': '{time} to departure',
+  'progress.over': '{time} past the planned departure',
+
+  // Sync status
+  'sync.saved': 'Saved',
+  'sync.pending': 'Waiting to send',
+  'sync.offline': 'Offline',
+  'sync.savedTitle': 'All changes are saved on the server.',
+  'sync.pendingTitle': 'Changes are stored on the device and waiting to be sent to the server.',
+  'sync.offlineTitle': 'No connection – changes are stored on the device and sent once online.',
 };
