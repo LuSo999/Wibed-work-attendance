@@ -539,4 +539,13 @@ export default {
   'sync.savedTitle': 'Všechny změny jsou uložené na serveru.',
   'sync.pendingTitle': 'Změny jsou uložené v zařízení a čekají na odeslání na server.',
   'sync.offlineTitle': 'Bez připojení – změny se uloží v zařízení a odešlou se po připojení.',
+  // Plán – panel nastavení, souhrn, týdny
+  'settings.open': 'Nastavení',
+  'settings.tabSchedule': 'Rozvrh',
+  'settings.tabRules': 'Pravidla',
+  'summary.more': 'Další údaje ▾',
+  'summary.less': 'Méně údajů ▴',
+  'table.today': 'dnes',
+  'table.actualLong': 'Skutečnost',
+  'table.weekHeader': 'Týden {week} · {parity} · {from} – {to}',
 };

@@ -119,6 +119,11 @@ export function formatDateShort(dateStr, lang = current) {
   return fmt(lang, 'short', { day: 'numeric', month: 'numeric', year: 'numeric' }).format(utc(dateStr));
 }
 
+/** Den a měsíc: '5. 10.' / '05/10'. */
+export function formatDayMonth(dateStr, lang = current) {
+  return fmt(lang, 'dm', { day: 'numeric', month: 'numeric' }).format(utc(dateStr));
+}
+
 /** Zkratka dne v týdnu: 'Po' / 'Mon'. */
 export function weekdayShort(dateStr, lang = current) {
   const text = fmt(lang, 'wd', { weekday: 'short' }).format(utc(dateStr)).replace('.', '');

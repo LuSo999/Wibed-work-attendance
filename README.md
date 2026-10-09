@@ -189,8 +189,17 @@ It can still be saved, it is only a warning.
    (with the default break rule).
 7. Parity is determined by the ISO week of each day separately, even when the week crosses a month boundary.
 
+**Plan settings** (odd and even week schedule, anchor, core time, bounds, daily hours, break, public holidays and language) are in the
+panel behind the gear **⚙ Settings** on the Plan page – a modal window on desktop, a bottom sheet on mobile. The panel has the tabs
+**Schedule** and **Rules** (also operable with the arrow keys). Changes of daily hours, break and holidays go through the impact dialog (see History protection).
+
+**Summary:** on mobile Projected, Deviation and Average are visible, the rest (Required, Worked, Plan remaining) after tapping "More figures".
+
 **Plan table:** columns Arrival, Departure, Plan (h) and Actual (h). Past days show actual times,
-future days planned ones (italic, muted).
+future days planned ones (italic, muted). Weeks are separated by a prominent header (week number, odd/even, date range) and rows have a
+subtly different tint for odd (warm) and even (cool) weeks; the parity is always written as well (O/E badge), it does not rely on colour only.
+Weekends stay visible but muted. Today is highlighted (outline and a "today" tag) and scrolled into view when the Plan page opens.
+The state of a day (planned, fixed day, exception, missing record…) is shown by tags in the Type column.
 
 **Day exceptions:** tap today or a future day in the plan to set an absence (whole day or hours), a fixed arrival or departure,
 fixed working hours, a plan note, or to **clear a fixed time from the schedule** for that day (arrival and departure separately). Past days
@@ -245,7 +254,7 @@ Firestore snapshot metadata) or *Offline* (no connection; writes are stored on t
   be switched per user language without a build step or a server. Everything inside the app switches.
 - **Czech public holidays** (`czHolidays`, on by default): when turned off, holidays count as regular work days (required hours, plan, overtime).
   On every language change the app asks "Turn off Czech public holidays?" (if they are on), and once after the first sign-in
-  of a user who does not use Czech. The option is also in the settings (Plan → Settings → App).
+  of a user who does not use Czech. The option is also in the settings (Plan → ⚙ Settings → Rules → App).
 - A holiday change always applies **retroactively** to all dates, so the impact on the bank and the number of affected closed days is shown before saving.
 - The CSV export has headers in the current language, a semicolon separator, UTF-8 with BOM and a decimal comma (Czech) or point (English).
 
@@ -283,7 +292,7 @@ Without confirmation the change is not saved. An overview of rule validity is in
 ## Changing the rules
 
 The default break interval and length and the default daily hours are in one place, the `RULES` constant in [`js/calc.js`](js/calc.js).
-Every user can override them in **Plan → Working time and plan settings** – with a validity date (see History protection).
+Every user can override them in **Plan → ⚙ Settings → Rules** – with a validity date (see History protection).
 Czech public holidays (including the movable Good Friday and Easter Monday) are computed by `czechHolidays`; their names are
 dictionary keys (`holiday.*`). Turning them on and off is controlled by `configureHolidays({ enabled })`.
 

@@ -11,7 +11,7 @@ import {
 } from './plan.js';
 import { enhanceTimeInputs } from './time24.js';
 import {
-  t, tr, weekdayName, weekdayShort, formatMonthYear, onLanguageChange,
+  t, tr, weekdayName, weekdayShort, formatMonthYear, formatDayMonth, onLanguageChange,
 } from './i18n.js';
 import {
   $, escapeHtml, todayStr, formatDateLong, formatDateShort, toast, confirmDialog, setError,
@@ -339,16 +339,16 @@ function openHolidaysDialog(enabled) {
 // ---------------------------------------------------------------------------
 // Plán měsíce
 // ---------------------------------------------------------------------------
-const ROW_STYLE = {
-  done: { row: '', label: 'legend.done', chip: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
-  filled: { row: 'bg-teal-50/70 dark:bg-teal-950/30', label: 'legend.filled', chip: 'bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-200' },
-  missing: { row: 'bg-rose-50/70 dark:bg-rose-950/30', label: 'legend.missing', chip: 'bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200' },
-  absence: { row: 'bg-sky-50/70 dark:bg-sky-950/30', label: 'legend.absence', chip: 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200' },
-  fixed: { row: 'bg-violet-50/70 dark:bg-violet-950/30', label: 'tag.fixedDay', chip: 'bg-violet-100 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200' },
-  override: { row: 'bg-amber-50/70 dark:bg-amber-950/30', label: 'legend.override', chip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200' },
-  regular: { row: 'bg-indigo-50/60 dark:bg-indigo-950/30', label: 'legend.regular', chip: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200' },
-  cleared: { row: '', label: '', chip: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
-  off: { row: 'text-slate-400 dark:text-slate-600', label: '', chip: '' },
+const KIND_CHIP = {
+  done: { label: 'legend.done', chip: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
+  filled: { label: 'legend.filled', chip: 'bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-200' },
+  missing: { label: 'legend.missing', chip: 'bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200' },
+  absence: { label: 'legend.absence', chip: 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200' },
+  fixed: { label: 'tag.fixedDay', chip: 'bg-violet-100 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200' },
+  override: { label: 'legend.override', chip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200' },
+  regular: { label: 'legend.regular', chip: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200' },
+  cleared: { label: '', chip: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
+  off: { label: '', chip: '' },
 };
 
 /** Styl řádku: výjimka má přednost (kromě proběhlých dnů). */
@@ -357,7 +357,7 @@ function styleKey(d) {
   return d.kind;
 }
 
-const chip = (key, text = t(ROW_STYLE[key].label)) => `<span class="inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${ROW_STYLE[key].chip}">${escapeHtml(text)}</span>`;
+const chip = (key, text = t(KIND_CHIP[key].label)) => `<span class="inline-block rounded-full px-1.5 py-0.5 text-[11px] font-medium leading-tight ${KIND_CHIP[key].chip}">${escapeHtml(text)}</span>`;
 
 /** Který konec dne je pevný z rozvrhu/výjimky (klíč štítku). */
 function fixedLabel(d) {
@@ -373,7 +373,7 @@ function typeText(d) {
   if (!d.workday && d.kind === 'off') return escapeHtml(d.holiday ? t(d.holiday) : t('common.weekend'));
   const parts = [];
   if (d.clearedFixed) parts.push(chip('cleared', t(`tag.cleared.${d.clearedFixed}`)));
-  if (d.note) parts.push(`<button type="button" data-toggle-note="${d.date}" class="inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${ROW_STYLE.override.chip}" title="${escapeHtml(d.note)}">${NOTE_ICON} ${escapeHtml(t('tag.note'))}</button>`);
+  if (d.note) parts.push(`<button type="button" data-toggle-note="${d.date}" class="inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${KIND_CHIP.override.chip}" title="${escapeHtml(d.note)}">${NOTE_ICON} ${escapeHtml(t('tag.note'))}</button>`);
   if (d.type && d.type !== DAY_TYPES.WORK) {
     parts.push(escapeHtml(typeLabel(d.type)) + (d.absence && d.absence < d.credited ? ` ${formatMinutes(d.absence)} h` : ''));
   }
@@ -387,7 +387,7 @@ function typeText(d) {
 /** Příchod/odchod: skutečnost normálně, plán tlumeně. */
 function timeCell(actual, planned) {
   if (actual) return `<span>${escapeHtml(actual)}</span>`;
-  if (planned) return `<span class="italic text-slate-400 dark:text-slate-500" title="${escapeHtml(t('table.planned'))}">${planned}</span>`;
+  if (planned) return `<span class="italic text-slate-500 dark:text-slate-400" title="${escapeHtml(t('table.planned'))}">${planned}</span>`;
   return '';
 }
 
@@ -426,14 +426,18 @@ function renderMonthPlan() {
   const { summary: s } = plan;
   $('#plan-month-title').textContent = formatMonthYear(planMonth.y, planMonth.m);
   const devTone = s.deviation === 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
+  // na mobilu jsou vidět jen Předpoklad, Odchylka a Průměr, ostatní po rozbalení
   $('#plan-summary').innerHTML = [
-    summaryCard(t('summary.fund'), h(s.fund)),
-    summaryCard(t('summary.worked'), h(s.worked), t('summary.workedSub')),
-    summaryCard(t('summary.remaining'), h(s.planRemaining)),
     summaryCard(t('summary.projected'), h(s.projected), t('summary.projectedSub')),
     summaryCard(t('summary.deviation'), `${signed(s.deviation)} h`, t('summary.deviationSub'), devTone),
     summaryCard(t('summary.average'), s.averageRegular != null ? h(s.averageRegular) : '—', t('summary.averageSub', { count: s.regularDays })),
   ].join('');
+  $('#plan-summary-extra').innerHTML = [
+    summaryCard(t('summary.fund'), h(s.fund)),
+    summaryCard(t('summary.worked'), h(s.worked), t('summary.workedSub')),
+    summaryCard(t('summary.remaining'), h(s.planRemaining)),
+  ].join('');
+  renderSummaryToggle();
 
   const warnEl = $('#plan-warnings');
   warnEl.innerHTML = plan.warnings.map((w) => `<li>⚠ ${escapeHtml(tr(w))}</li>`).join('');
@@ -445,26 +449,104 @@ function renderMonthPlan() {
   bulk.textContent = t('fill.bulkButton', { count: candidates.length });
 
   const today = todayStr();
+  let lastWeek = null;
   $('#plan-table tbody').innerHTML = plan.days.map((d) => {
-    const key = styleKey(d);
     const dayNum = Number(d.date.slice(8));
     const warnLabel = t(d.warnings.some((w) => CORE_WARNING_KEYS.has(w.key)) ? 'table.warnCore' : 'table.warn');
     const warn = d.warnings.length ? `<span class="block text-[11px] text-amber-700 dark:text-amber-400">⚠ ${escapeHtml(warnLabel)}</span>` : '';
-    const parityShort = t(`parity.short.${d.parity}`);
-    return `
-      <tr data-plan-date="${d.date}" title="${escapeHtml(rowTitle(d))}" class="cursor-pointer border-t border-slate-100 hover:brightness-95 dark:border-slate-800 ${ROW_STYLE[key].row} ${d.date === today ? 'font-semibold outline outline-2 -outline-offset-2 outline-indigo-500' : ''}">
-        <td class="whitespace-nowrap px-2 py-2"><span class="tabular">${dayNum}.</span> <span class="text-[11px] text-slate-500 dark:text-slate-400">${escapeHtml(weekdayShort(d.date))}</span>
-          <span class="ml-0.5 rounded px-1 text-[10px] font-bold ${d.parity === 'odd' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200' : 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200'}" title="${escapeHtml(t('week.badge', { week: d.week, parity: parityLabel(d.parity) }))}">${escapeHtml(parityShort)}</span></td>
-        <td class="px-1 py-2 text-xs">${typeText(d)}${warn}</td>
-        <td class="tabular whitespace-nowrap px-1.5 py-2 text-right">${timeCell(d.record?.arrival, d.plannedWorked !== null ? d.arrival : null)}</td>
-        <td class="tabular whitespace-nowrap px-1.5 py-2 text-right">${timeCell(d.record?.departure, d.plannedWorked !== null ? d.plannedLeave : null)}</td>
-        <td class="tabular whitespace-nowrap px-1.5 py-2 text-right">${d.plannedWorked !== null && d.kind !== 'absence' ? formatMinutes(d.plannedWorked) : ''}</td>
-        <td class="tabular whitespace-nowrap px-1.5 py-2 text-right">${actualText(d)}</td>
+    const isToday = d.date === today;
+    const weekend = !d.workday && !d.holiday;
+    // týdny: výrazný oddělovač s hlavičkou a jemný odstín pozadí podle parity (odznak L/S zůstává)
+    const header = d.week !== lastWeek ? weekHeaderRow(d, plan.days) : '';
+    lastWeek = d.week;
+    const rowTone = weekend ? 'bg-slate-100/80 text-slate-500 dark:bg-slate-950/60 dark:text-slate-400' : WEEK_TONE[d.parity].row;
+    return `${header}
+      <tr data-plan-date="${d.date}" title="${escapeHtml(rowTitle(d))}" ${isToday ? 'aria-current="date"' : ''} class="cursor-pointer border-t border-slate-200/70 hover:brightness-95 dark:border-slate-800 ${rowTone} ${isToday ? 'font-semibold outline outline-2 -outline-offset-2 outline-indigo-500' : ''}">
+        <td class="whitespace-nowrap py-1.5 pl-1.5 pr-1"><span class="tabular">${dayNum}.</span> <span class="text-[11px] ${weekend ? '' : 'text-slate-500 dark:text-slate-400'}">${escapeHtml(weekdayShort(d.date))}</span>
+          <span class="rounded px-1 text-[10px] font-bold ${WEEK_TONE[d.parity].badge}" title="${escapeHtml(t('week.badge', { week: d.week, parity: parityLabel(d.parity) }))}">${escapeHtml(t(`parity.short.${d.parity}`))}</span>${isToday ? `<span class="mt-0.5 block w-fit rounded bg-indigo-600 px-1 text-[10px] font-bold text-white">${escapeHtml(t('table.today'))}</span>` : ''}</td>
+        <td class="px-1 py-1.5 text-xs"><div class="max-w-[5.25rem] sm:max-w-none">${typeText(d)}${warn}</div></td>
+        <td class="tabular whitespace-nowrap px-1 py-1.5 text-right">${timeCell(d.record?.arrival, d.plannedWorked !== null ? d.arrival : null)}</td>
+        <td class="tabular whitespace-nowrap px-1 py-1.5 text-right">${timeCell(d.record?.departure, d.plannedWorked !== null ? d.plannedLeave : null)}</td>
+        <td class="tabular whitespace-nowrap px-1 py-1.5 text-right">${d.plannedWorked !== null && d.kind !== 'absence' ? formatMinutes(d.plannedWorked) : ''}</td>
+        <td class="tabular whitespace-nowrap py-1.5 pl-1 pr-2 text-right">${actualText(d)}</td>
       </tr>${d.note ? `
-      <tr data-note-for="${d.date}" class="${expandedNotes.has(d.date) ? '' : 'hidden'} md:table-row ${ROW_STYLE[key].row}">
+      <tr data-note-for="${d.date}" class="${expandedNotes.has(d.date) ? '' : 'hidden'} md:table-row ${rowTone}">
         <td colspan="6" class="px-2 pb-2 pt-0 text-xs text-amber-800 dark:text-amber-300">${NOTE_ICON} ${escapeHtml(d.note)}</td>
       </tr>` : ''}`;
   }).join('');
+}
+
+/**
+ * Odstíny týdnů: lichý teplý, sudý studený. Kontrast textu (slate-900 / slate-100) je v obou
+ * režimech přes 12:1; parita je navíc vždy napsaná (odznak L/S a hlavička týdne).
+ */
+const WEEK_TONE = {
+  odd: {
+    row: 'bg-amber-50/60 dark:bg-amber-950/20',
+    header: 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-900/40 dark:text-amber-100 dark:border-amber-700',
+    badge: 'bg-amber-200 text-amber-900 dark:bg-amber-800/70 dark:text-amber-100',
+  },
+  even: {
+    row: 'bg-sky-50/60 dark:bg-sky-950/20',
+    header: 'bg-sky-100 text-sky-900 border-sky-300 dark:bg-sky-900/40 dark:text-sky-100 dark:border-sky-700',
+    badge: 'bg-sky-200 text-sky-900 dark:bg-sky-800/70 dark:text-sky-100',
+  },
+};
+
+/** Hlavička týdne v tabulce: číslo týdne, lichý/sudý a rozsah dat (v rámci zobrazeného měsíce). */
+function weekHeaderRow(d, days) {
+  const inWeek = days.filter((x) => x.week === d.week);
+  const from = formatDayMonth(inWeek[0].date);
+  const to = formatDayMonth(inWeek[inWeek.length - 1].date);
+  return `
+      <tr class="week-sep border-t-2 ${WEEK_TONE[d.parity].header}">
+        <th colspan="6" scope="rowgroup" class="px-2 py-1.5 text-left text-xs font-bold">
+          <span class="mr-1 rounded px-1 text-[10px] ${WEEK_TONE[d.parity].badge}">${escapeHtml(t(`parity.short.${d.parity}`))}</span>${escapeHtml(t('table.weekHeader', { week: d.week, parity: parityLabel(d.parity), from, to }))}
+        </th>
+      </tr>`;
+}
+
+/** Posune tabulku plánu tak, aby byl dnešek ve výřezu (jen v aktuálním měsíci). */
+export function scrollPlanToToday() {
+  const row = document.querySelector(`[data-plan-date="${todayStr()}"]`);
+  if (row && !$('#tab-plan').hidden) row.scrollIntoView({ block: 'center' });
+}
+
+let summaryExpanded = false;
+function renderSummaryToggle() {
+  const btn = $('#btn-plan-summary-more');
+  btn.textContent = t(summaryExpanded ? 'summary.less' : 'summary.more');
+  btn.setAttribute('aria-expanded', String(summaryExpanded));
+  $('#plan-summary-extra').classList.toggle('hidden', !summaryExpanded);
+  $('#plan-summary-extra').classList.toggle('grid', summaryExpanded);
+}
+
+// ---------------------------------------------------------------------------
+// Panel nastavení plánu (záložky Rozvrh a Pravidla)
+// ---------------------------------------------------------------------------
+let settingsTab = 'schedule';
+
+function showSettingsTab(tab) {
+  settingsTab = tab;
+  for (const btn of document.querySelectorAll('[data-settings-tab]')) {
+    const active = btn.dataset.settingsTab === tab;
+    btn.setAttribute('aria-selected', String(active));
+    btn.tabIndex = active ? 0 : -1;
+    btn.classList.toggle('border-indigo-600', active);
+    btn.classList.toggle('text-indigo-700', active);
+    btn.classList.toggle('dark:text-indigo-300', active);
+    btn.classList.toggle('border-transparent', !active);
+    btn.classList.toggle('text-slate-500', !active);
+    btn.classList.toggle('dark:text-slate-400', !active);
+  }
+  $('#panel-schedule').hidden = tab !== 'schedule';
+  $('#form-plan-settings').hidden = tab !== 'rules';
+}
+
+export function openPlanSettings(tab = settingsTab) {
+  showSettingsTab(tab);
+  $('#dlg-plan-settings').showModal();
+  document.querySelector(`[data-settings-tab="${tab}"]`).focus();
 }
 
 function shiftPlanMonth(delta) {
@@ -686,8 +768,30 @@ export function initPlanView(context) {
     const d = new Date();
     planMonth = { y: d.getFullYear(), m: d.getMonth() + 1 };
     renderMonthPlan();
+    scrollPlanToToday();
   });
   $('#btn-bulk-fill').addEventListener('click', openBulkFill);
+  $('#btn-plan-settings').addEventListener('click', () => openPlanSettings());
+  $('#btn-plan-settings-close').addEventListener('click', () => $('#dlg-plan-settings').close());
+  $('#dlg-plan-settings').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.close(); // klik na pozadí
+  });
+  const tabs = [...document.querySelectorAll('[data-settings-tab]')];
+  for (const btn of tabs) {
+    btn.addEventListener('click', () => showSettingsTab(btn.dataset.settingsTab));
+    // šipky mezi záložkami (vzor WAI-ARIA tabs)
+    btn.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const next = tabs[(tabs.indexOf(btn) + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      showSettingsTab(next.dataset.settingsTab);
+      next.focus();
+    });
+  }
+  showSettingsTab('schedule');
+  $('#btn-plan-summary-more').addEventListener('click', () => {
+    summaryExpanded = !summaryExpanded;
+    renderSummaryToggle();
+  });
   $('#btn-bulk-clear').addEventListener('click', openBulkClear);
   $('#form-bulk-clear').addEventListener('input', updateBulkClear);
   $('#form-bulk-clear').addEventListener('change', updateBulkClear);

@@ -36,6 +36,12 @@
     body { -webkit-tap-highlight-color: transparent; }
     .tabular { font-variant-numeric: tabular-nums; }
     dialog::backdrop { background: rgb(15 23 42 / .55); backdrop-filter: blur(2px); }
+    /* Spodní list na mobilu, modální okno od šířky 768 px */
+    dialog.sheet { max-height: 90vh; overflow-y: auto; }
+    @media (max-width: 767px) {
+      dialog.sheet { margin: auto 0 0; max-width: 100%; width: 100%; border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+        padding-bottom: env(safe-area-inset-bottom, 0px); }
+    }
     .pb-safe { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + .5rem); }
     input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     .dark input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
@@ -124,7 +130,7 @@
           <button data-tab="bank" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium" data-i18n="nav.bank"></button>
         </nav>
         <div class="ml-auto flex items-center gap-1">
-          <span id="sync-status" class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" role="status" aria-live="polite"><span id="sync-icon" aria-hidden="true"></span><span id="sync-label"></span></span>
+          <span id="sync-status" class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" role="status" aria-live="polite"><span id="sync-icon" aria-hidden="true"></span><span id="sync-label" class="max-[349px]:sr-only"></span></span>
           <button id="btn-lang" type="button" class="rounded-lg px-2 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"></button>
           <button id="btn-theme" type="button" class="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"></button>
           <div class="relative">
@@ -251,72 +257,13 @@
 
       <!-- ---------- Plán ---------- -->
       <div id="tab-plan" class="space-y-4" hidden>
-        <div id="plan-week" class="flex flex-wrap items-center gap-2"></div>
-
-        <div>
-          <h2 class="mb-2 text-lg font-bold" data-i18n="schedule.title"></h2>
-          <p class="mb-3 text-sm text-slate-500 dark:text-slate-400" data-i18n="schedule.intro"></p>
-          <div id="plan-weeks" class="grid gap-4 md:grid-cols-2"></div>
+        <div class="flex items-center gap-2">
+          <div id="plan-week" class="flex flex-1 flex-wrap items-center gap-2"></div>
+          <button id="btn-plan-settings" type="button" class="flex items-center gap-1.5 rounded-xl bg-white px-3 py-2 text-sm font-medium shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:ring-slate-800 dark:hover:bg-slate-800" aria-haspopup="dialog">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M10.3 4.3c.4-1.7 2.9-1.7 3.4 0a1.7 1.7 0 0 0 2.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 0 0 1 2.5c1.8.5 1.8 3 0 3.4a1.7 1.7 0 0 0-1 2.6c.9 1.5-.9 3.3-2.4 2.4a1.7 1.7 0 0 0-2.6 1c-.5 1.8-3 1.8-3.4 0a1.7 1.7 0 0 0-2.6-1c-1.5.9-3.3-.9-2.4-2.4a1.7 1.7 0 0 0-1-2.6c-1.8-.4-1.8-2.9 0-3.4a1.7 1.7 0 0 0 1-2.5c-.9-1.6.9-3.3 2.4-2.4a1.7 1.7 0 0 0 2.6-1.1z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span data-i18n="settings.open"></span>
+          </button>
         </div>
-
-        <details class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-          <summary class="cursor-pointer px-5 py-4 font-semibold" data-i18n="settings.title"></summary>
-          <form id="form-plan-settings" class="grid grid-cols-2 gap-3 px-5 pb-5 sm:grid-cols-3" novalidate>
-            <div class="col-span-full">
-              <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.anchor"></span>
-              <div class="mt-1 grid grid-cols-2 gap-3">
-                <label class="block"><span class="sr-only" data-i18n="settings.anchorKind"></span>
-                  <select name="anchorMode" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
-                    <option value="arrival" data-i18n="anchor.arrival"></option>
-                    <option value="departure" data-i18n="anchor.departure"></option>
-                  </select></label>
-                <label class="block"><span class="sr-only" data-i18n="settings.anchorTime"></span>
-                  <input name="anchorTime" type="time" data-time24 class="tabular w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-              </div>
-              <p id="anchor-hint" class="mt-1 text-xs text-slate-500 dark:text-slate-400"></p>
-            </div>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.earliest"></span>
-              <input name="earliestArrival" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.latest"></span>
-              <input name="latestDeparture" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.coreStart"></span>
-              <input name="coreStart" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.coreEnd"></span>
-              <input name="coreEnd" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.dailyFund"></span>
-              <input name="dailyFundHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.maxWorked"></span>
-              <input name="maxWorkedHoursPerDay" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-            <fieldset class="col-span-full rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
-              <legend class="px-1 text-sm font-semibold" data-i18n="settings.break"></legend>
-              <div class="grid grid-cols-2 gap-3">
-                <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.breakAfter"></span>
-                  <input name="breakAfterHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-                <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.breakLength"></span>
-                  <input name="breakLengthMinutes" type="number" min="0" max="600" step="5" inputmode="numeric" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-              </div>
-              <p id="break-rule-text" class="mt-2 text-xs text-slate-600 dark:text-slate-400"></p>
-              <ul id="rule-history" class="mt-2 space-y-0.5 text-xs text-slate-500 dark:text-slate-400" hidden></ul>
-              <p id="break-rule-error" class="mt-1 text-sm text-red-600 dark:text-red-400" hidden></p>
-            </fieldset>
-            <ul id="plan-settings-warnings" class="col-span-full space-y-1 rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" hidden></ul>
-            <fieldset class="col-span-full rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
-              <legend class="px-1 text-sm font-semibold" data-i18n="settings.app"></legend>
-              <div class="grid grid-cols-2 gap-3">
-                <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="lang.label"></span>
-                  <select name="language" data-app-setting class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
-                    <option value="cs" data-i18n="lang.cs"></option>
-                    <option value="en" data-i18n="lang.en"></option>
-                  </select></label>
-                <label class="flex items-center gap-2 self-end pb-2.5 text-sm">
-                  <input name="czHolidays" type="checkbox" data-app-setting class="h-4 w-4 rounded border-slate-300 text-indigo-600 dark:border-slate-600">
-                  <span data-i18n="settings.czHolidays"></span></label>
-              </div>
-              <p class="mt-2 text-xs text-slate-600 dark:text-slate-400" data-i18n="settings.czHolidaysHint"></p>
-            </fieldset>
-            <p class="col-span-full text-xs text-slate-500 dark:text-slate-400" data-i18n="settings.autosave"></p>
-          </form>
-        </details>
 
         <div>
           <div class="flex items-center gap-2">
@@ -339,7 +286,11 @@
           <button id="btn-bulk-undo" type="button" class="rounded-lg bg-white/15 px-3 py-1.5 font-semibold hover:bg-white/25 dark:bg-slate-900/10 dark:hover:bg-slate-900/20" data-i18n="common.undo"></button>
           <button id="btn-bulk-undo-close" type="button" class="rounded-lg px-2 py-1.5 opacity-70 hover:opacity-100" data-i18n-attr="aria-label:common.hide">✕</button>
         </div>
-        <div id="plan-summary" class="grid grid-cols-2 gap-2 sm:grid-cols-3"></div>
+        <div>
+          <div id="plan-summary" class="grid grid-cols-3 gap-2"></div>
+          <button id="btn-plan-summary-more" type="button" class="mt-1 text-xs font-medium text-indigo-600 md:hidden dark:text-indigo-400" aria-expanded="false" aria-controls="plan-summary-extra"></button>
+          <div id="plan-summary-extra" class="mt-2 hidden grid-cols-3 gap-2 md:grid"></div>
+        </div>
         <ul id="plan-warnings" class="space-y-1 rounded-2xl bg-amber-50 p-4 text-sm font-medium text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900" hidden></ul>
         <div class="flex flex-wrap gap-1.5 text-[11px] font-medium">
           <span class="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300" data-i18n="legend.done"></span>
@@ -353,15 +304,15 @@
           <span class="rounded-full bg-slate-200 px-2 py-0.5 text-slate-700 dark:bg-slate-700 dark:text-slate-200" data-i18n="legend.cleared"></span>
         </div>
         <div class="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-          <table id="plan-table" class="w-full text-[13px]">
-            <thead class="text-left text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <table id="plan-table" class="w-full text-[12.5px] sm:text-[13px]">
+            <thead class="text-left text-[11px] uppercase text-slate-500 sm:tracking-wide dark:text-slate-400">
               <tr>
-                <th class="px-2 py-2 font-medium" data-i18n="table.date"></th>
+                <th class="py-2 pl-1.5 pr-1 font-medium" data-i18n="table.date"></th>
                 <th class="px-1 py-2 font-medium" data-i18n="table.type"></th>
-                <th class="px-1.5 py-2 text-right font-medium" data-i18n="table.arrival"></th>
-                <th class="px-1.5 py-2 text-right font-medium" data-i18n="table.departure"></th>
-                <th class="px-1.5 py-2 text-right font-medium" data-i18n="table.plan" data-i18n-attr="title:table.planTitle"></th>
-                <th class="px-1.5 py-2 text-right font-medium" data-i18n="table.actual" data-i18n-attr="title:table.actualTitle"></th>
+                <th class="px-1 py-2 text-right font-medium" data-i18n-attr="title:field.arrival"><span class="sm:hidden" data-i18n="table.arrival"></span><span class="hidden sm:inline" data-i18n="field.arrival"></span></th>
+                <th class="px-1 py-2 text-right font-medium" data-i18n-attr="title:field.departure"><span class="sm:hidden" data-i18n="table.departure"></span><span class="hidden sm:inline" data-i18n="field.departure"></span></th>
+                <th class="px-1 py-2 text-right font-medium" data-i18n-attr="title:table.planTitle"><span data-i18n="table.plan"></span></th>
+                <th class="py-2 pl-1 pr-2 text-right font-medium" data-i18n-attr="title:table.actualTitle"><span class="sm:hidden" data-i18n="table.actual"></span><span class="hidden sm:inline" data-i18n="table.actualLong"></span></th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -421,6 +372,81 @@
       </div>
     </nav>
   </section>
+
+  <!-- ===== Nastavení plánu (modální okno, na mobilu spodní list) ===== -->
+  <dialog id="dlg-plan-settings" class="sheet w-full max-w-3xl rounded-2xl bg-slate-50 p-0 text-slate-900 shadow-xl dark:bg-slate-950 dark:text-slate-100" data-i18n-attr="aria-label:settings.title">
+    <div class="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-5 pb-0 pt-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+      <div class="flex items-center gap-3">
+        <h2 class="flex-1 text-lg font-bold" data-i18n="settings.title"></h2>
+        <button id="btn-plan-settings-close" type="button" class="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n-attr="aria-label:common.close">✕</button>
+      </div>
+      <div class="mt-2 flex gap-1" role="tablist" data-i18n-attr="aria-label:settings.title">
+        <button id="tab-btn-schedule" type="button" role="tab" data-settings-tab="schedule" aria-controls="panel-schedule" class="settings-tab border-b-2 px-3 py-2 text-sm font-semibold" data-i18n="settings.tabSchedule"></button>
+        <button id="tab-btn-rules" type="button" role="tab" data-settings-tab="rules" aria-controls="form-plan-settings" class="settings-tab border-b-2 px-3 py-2 text-sm font-semibold" data-i18n="settings.tabRules"></button>
+      </div>
+    </div>
+    <div class="p-4 sm:p-5">
+        <div id="panel-schedule" role="tabpanel" aria-labelledby="tab-btn-schedule">
+          <p class="mb-3 text-sm text-slate-500 dark:text-slate-400" data-i18n="schedule.intro"></p>
+          <div id="plan-weeks" class="grid gap-4 md:grid-cols-2"></div>
+        </div>
+          <form id="form-plan-settings" class="grid grid-cols-2 gap-3 sm:grid-cols-3" novalidate role="tabpanel" aria-labelledby="tab-btn-rules" hidden>
+            <div class="col-span-full">
+              <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.anchor"></span>
+              <div class="mt-1 grid grid-cols-2 gap-3">
+                <label class="block"><span class="sr-only" data-i18n="settings.anchorKind"></span>
+                  <select name="anchorMode" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                    <option value="arrival" data-i18n="anchor.arrival"></option>
+                    <option value="departure" data-i18n="anchor.departure"></option>
+                  </select></label>
+                <label class="block"><span class="sr-only" data-i18n="settings.anchorTime"></span>
+                  <input name="anchorTime" type="time" data-time24 class="tabular w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+              </div>
+              <p id="anchor-hint" class="mt-1 text-xs text-slate-500 dark:text-slate-400"></p>
+            </div>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.earliest"></span>
+              <input name="earliestArrival" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.latest"></span>
+              <input name="latestDeparture" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.coreStart"></span>
+              <input name="coreStart" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.coreEnd"></span>
+              <input name="coreEnd" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.dailyFund"></span>
+              <input name="dailyFundHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.maxWorked"></span>
+              <input name="maxWorkedHoursPerDay" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <fieldset class="col-span-full rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
+              <legend class="px-1 text-sm font-semibold" data-i18n="settings.break"></legend>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.breakAfter"></span>
+                  <input name="breakAfterHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+                <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.breakLength"></span>
+                  <input name="breakLengthMinutes" type="number" min="0" max="600" step="5" inputmode="numeric" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+              </div>
+              <p id="break-rule-text" class="mt-2 text-xs text-slate-600 dark:text-slate-400"></p>
+              <ul id="rule-history" class="mt-2 space-y-0.5 text-xs text-slate-500 dark:text-slate-400" hidden></ul>
+              <p id="break-rule-error" class="mt-1 text-sm text-red-600 dark:text-red-400" hidden></p>
+            </fieldset>
+            <ul id="plan-settings-warnings" class="col-span-full space-y-1 rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" hidden></ul>
+            <fieldset class="col-span-full rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
+              <legend class="px-1 text-sm font-semibold" data-i18n="settings.app"></legend>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="lang.label"></span>
+                  <select name="language" data-app-setting class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                    <option value="cs" data-i18n="lang.cs"></option>
+                    <option value="en" data-i18n="lang.en"></option>
+                  </select></label>
+                <label class="flex items-center gap-2 self-end pb-2.5 text-sm">
+                  <input name="czHolidays" type="checkbox" data-app-setting class="h-4 w-4 rounded border-slate-300 text-indigo-600 dark:border-slate-600">
+                  <span data-i18n="settings.czHolidays"></span></label>
+              </div>
+              <p class="mt-2 text-xs text-slate-600 dark:text-slate-400" data-i18n="settings.czHolidaysHint"></p>
+            </fieldset>
+            <p class="col-span-full text-xs text-slate-500 dark:text-slate-400" data-i18n="settings.autosave"></p>
+          </form>
+    </div>
+  </dialog>
 
   <!-- ===== Dialog úpravy dne ===== -->
   <dialog id="dlg-day" class="w-[calc(100%-2rem)] max-w-md rounded-2xl bg-white p-0 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-slate-100">

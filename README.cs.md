@@ -189,8 +189,17 @@ Uložit ho ale jde, je to jen upozornění.
    (při výchozím pravidle přestávky).
 7. Parita se určuje podle ISO týdne každého dne zvlášť, i když týden přesahuje hranici měsíců.
 
+**Nastavení plánu** (rozvrh lichého a sudého týdne, kotva, pevná doba, hranice, fond, přestávka, státní svátky a jazyk) je v panelu
+za ozubeným kolečkem **⚙ Nastavení** na stránce Plán – na počítači jako modální okno, na mobilu jako spodní list. Panel má záložky
+**Rozvrh** a **Pravidla** (ovladatelné i šipkami). Změny fondu, přestávky a svátků procházejí dialogem dopadu (viz Ochrana historie).
+
+**Souhrn:** na mobilu jsou vidět Předpoklad, Odchylka a Průměr, ostatní (Fond, Odpracováno, Plán zbývá) po klepnutí na „Další údaje“.
+
 **Tabulka plánu:** sloupce Příchod, Odchod, Plán (h) a Skutečnost (h). U proběhlých dnů jsou časy skutečné,
-u budoucích plánované (kurzívou, tlumeně).
+u budoucích plánované (kurzívou, tlumeně). Týdny odděluje výrazná hlavička (číslo týdne, lichý/sudý, rozsah dat) a řádky mají jemně
+odlišný odstín pro lichý (teplý) a sudý (studený) týden; parita je vždy i napsaná (odznak L/S), nestojí jen na barvě. Víkendy zůstávají
+vidět, ale jsou potlačené. Dnešek je zvýrazněný (rámeček a štítek „dnes“) a po otevření stránky Plán se posune do výřezu.
+Stav dne (plánováno, pevný den, výjimka, chybí záznam…) ukazují štítky ve sloupci Typ.
 
 **Výjimky dnů:** klepnutím na dnešní nebo budoucí den v plánu nastavíte nepřítomnost (celý den nebo hodiny), pevný příchod či odchod,
 pevné hodiny práce, poznámku k plánu, nebo **zrušíte pevný čas z rozvrhu** pro ten den (zvlášť příchod a odchod). Proběhlé dny
@@ -244,7 +253,7 @@ snapshotů Firestore) nebo *Offline* (bez připojení; zápisy se uloží v zař
   přepínat podle jazyka uživatele bez build kroku nebo serveru. Uvnitř aplikace se vše přepne.
 - **České státní svátky** (`czHolidays`, výchozí zapnuto): po vypnutí se svátky počítají jako běžné pracovní dny (fond, plán, přesčasy).
   Při každé změně jazyka se aplikace zeptá „Vypnout české státní svátky?“ (pokud jsou zapnuté), jednorázově také po prvním přihlášení
-  uživatele, který nepoužívá češtinu. Volba je i v nastavení (Plán → Nastavení → Aplikace).
+  uživatele, který nepoužívá češtinu. Volba je i v nastavení (Plán → ⚙ Nastavení → Pravidla → Aplikace).
 - Změna svátků platí vždy **zpětně** pro všechna data, proto se před uložením ukáže dopad na banku a počet dotčených uzavřených dnů.
 - Export CSV má hlavičky podle jazyka, oddělovač středník, UTF-8 s BOM a desetinnou čárku (čeština) nebo tečku (angličtina).
 
@@ -282,7 +291,7 @@ Bez potvrzení se změna neuloží. Přehled platnosti pravidel je v nastavení 
 ## Úprava pravidel
 
 Výchozí interval a délka přestávky i výchozí denní fond jsou na jednom místě, v konstantě `RULES` v [`js/calc.js`](js/calc.js).
-Každý uživatel si je může přepsat v **Plán → Nastavení pracovní doby a plánu** – s datem platnosti (viz Ochrana historie).
+Každý uživatel si je může přepsat v **Plán → ⚙ Nastavení → Pravidla** – s datem platnosti (viz Ochrana historie).
 Státní svátky ČR (včetně pohyblivého Velkého pátku a Velikonočního pondělí) počítá funkce `czechHolidays`; jejich názvy jsou
 klíče slovníku (`holiday.*`). Zapnutí a vypnutí řídí `configureHolidays({ enabled })`.
 

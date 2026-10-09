@@ -527,4 +527,13 @@ export default {
   'sync.savedTitle': 'All changes are saved on the server.',
   'sync.pendingTitle': 'Changes are stored on the device and waiting to be sent to the server.',
   'sync.offlineTitle': 'No connection – changes are stored on the device and sent once online.',
+  // Plan – settings panel, summary, weeks
+  'settings.open': 'Settings',
+  'settings.tabSchedule': 'Schedule',
+  'settings.tabRules': 'Rules',
+  'summary.more': 'More figures ▾',
+  'summary.less': 'Fewer figures ▴',
+  'table.today': 'today',
+  'table.actualLong': 'Actual',
+  'table.weekHeader': 'Week {week} · {parity} · {from} – {to}',
 };

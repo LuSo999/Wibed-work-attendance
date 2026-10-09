@@ -11,7 +11,7 @@ import {
   normalizeSettings, rulesFromSettings, buildMonthPlan, fillRecord, holidayChangeImpact, bankZeroing, dayProgress,
 } from './plan.js';
 import {
-  initPlanView, renderPlanView, weekBadgeHtml, flipParity, renderImpact,
+  initPlanView, renderPlanView, weekBadgeHtml, flipParity, renderImpact, scrollPlanToToday,
 } from './plan-view.js';
 import {
   t, tr, setLanguage, getLanguage, storedLanguage, onLanguageChange, applyTranslations, LANGUAGES,
@@ -226,6 +226,7 @@ function showTab(tab) {
     btn.classList.toggle('dark:text-slate-400', !active);
     btn.setAttribute('aria-current', active ? 'page' : 'false');
   }
+  if (tab === 'plan') scrollPlanToToday();
 }
 
 function tabFromHash() {
