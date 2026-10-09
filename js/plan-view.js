@@ -1,30 +1,35 @@
 // UI záložky „Plán“: rozvrh lichého/sudého týdne, nastavení, plán měsíce,
 // výjimky dnů a hromadné doplnění docházky. Výpočty dělá čistý modul plan.js.
 import {
-  DAY_TYPES, DAY_TYPE_LABELS, MONTH_LABELS, formatMinutes, parseTime, weekdayLabel, describeBreakRule,
-  hoursToMinutes, toTimeString,
+  DAY_TYPES, formatMinutes, parseTime, describeBreakRule, hoursToMinutes, toTimeString,
 } from './calc.js';
 import {
-  WEEKDAY_NAMES, PARITY_LABELS, CORE_WARNING, ANCHOR_LABELS, buildMonthPlan, fillCandidates, isoWeek,
+  CORE_WARNING_KEYS, buildMonthPlan, fillCandidates, isoWeek,
   weekParity, normalizeSettings, settingsWarnings, workedForStay, stayForWorked,
   rulesFromSettings, switchAnchorMode, validateOverride, isEmptyOverride, bulkClearFixed, scheduledDay,
-  applyRuleChange, isRuleChange, ruleChangeImpact, RULES_SINCE_EVER, NOTE_MAX,
+  applyRuleChange, isRuleChange, ruleChangeImpact, holidayChangeImpact, RULES_SINCE_EVER, NOTE_MAX,
 } from './plan.js';
 import { enhanceTimeInputs } from './time24.js';
+import {
+  t, tr, weekdayName, weekdayShort, formatMonthYear, onLanguageChange,
+} from './i18n.js';
 import {
   $, escapeHtml, todayStr, formatDateLong, formatDateShort, toast, confirmDialog, setError,
 } from './ui.js';
 
-let ctx; // { getState, saveRecord, saveSettings, saveOverride, deleteOverride, applyOverrides, openDayDialog }
+let ctx; // { getState, saveRecord, saveSettings, saveOverride, deleteOverride, applyOverrides, openDayDialog, changeLanguage, saveHolidays }
 const now = new Date();
 let planMonth = { y: now.getFullYear(), m: now.getMonth() + 1 };
 let weeksKey = '';
 const expandedNotes = new Set(); // rozbalené poznámky v tabulce (mobil)
 
 const signed = (min) => formatMinutes(min, { sign: true });
-/** České skloňování podle počtu: plural(2, ['den', 'dny', 'dnů']). */
-const plural = (n, [one, few, many]) => (n === 1 ? one : n >= 2 && n <= 4 ? few : many);
 const h = (min) => `${formatMinutes(min)} h`;
+const typeLabel = (type) => t(`type.${type}`);
+const parityLabel = (parity) => t(`parity.${parity}`);
+
+// Rozvrh a jeho popisky se po změně jazyka překreslí celé.
+onLanguageChange(() => { weeksKey = ''; });
 
 // ---------------------------------------------------------------------------
 // Odznak týdne (sdílený s přehledem)
@@ -37,15 +42,27 @@ export function weekBadgeHtml(settings, date = todayStr()) {
     : 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200';
   return `
     <span class="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold ${tone}">
-      Týden ${week} · ${PARITY_LABELS[parity]}
+      ${escapeHtml(t('week.badge', { week, parity: parityLabel(parity) }))}
     </span>
-    <button type="button" data-flip-parity class="rounded-full px-3 py-1 text-sm font-medium text-slate-500 hover:bg-slate-200/60 dark:text-slate-400 dark:hover:bg-slate-800" title="Prohodit lichý a sudý týden">⇄ Prohodit</button>`;
+    <button type="button" data-flip-parity class="rounded-full px-3 py-1 text-sm font-medium text-slate-500 hover:bg-slate-200/60 dark:text-slate-400 dark:hover:bg-slate-800" title="${escapeHtml(t('week.flipTitle'))}">⇄ ${escapeHtml(t('week.flip'))}</button>`;
 }
 
 export async function flipParity() {
   const { settings } = ctx.getState();
   ctx.saveSettings({ ...settings, parityFlip: !settings.parityFlip });
-  toast('Lichý a sudý týden prohozeny');
+  toast(t('week.flipped'));
+}
+
+// ---------------------------------------------------------------------------
+// Dopad změny na historii (sdílený dialog pravidel a dotaz na svátky)
+// ---------------------------------------------------------------------------
+/** Vykreslí dopad změny: zůstatek banky před → po a počet dotčených uzavřených dnů. */
+export function renderImpact(el, impact) {
+  const changed = impact.affectedDays > 0 || impact.balanceAfter !== impact.balanceBefore;
+  el.className = `mt-3 rounded-xl px-3 py-2 text-sm ${changed ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`;
+  el.innerHTML = `${escapeHtml(t(changed ? 'impact.changed' : 'impact.unchanged'))}<br>
+    ${escapeHtml(t('impact.balance'))} <b class="tabular">${signed(impact.balanceBefore)} h → ${signed(impact.balanceAfter)} h</b><br>
+    ${escapeHtml(t('impact.days'))} <b class="tabular">${impact.affectedDays}</b>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,29 +85,30 @@ function renderWeeks(settings, avgRegular) {
   const key = JSON.stringify([settings.schedule, settings.parityFlip, settings.anchorMode, settings.anchorTime, current]);
   const root = $('#plan-weeks');
   const arrMode = settings.anchorMode === 'arrival';
-  const emptyArr = arrMode ? `${settings.anchorTime} kotva` : 'dopočítat';
-  const emptyLv = arrMode ? 'dopočítat' : `${settings.anchorTime} kotva`;
+  const anchorLabel = t('schedule.anchorLabel', { time: settings.anchorTime });
+  const emptyArr = arrMode ? anchorLabel : t('schedule.compute');
+  const emptyLv = arrMode ? t('schedule.compute') : anchorLabel;
 
   if (key !== weeksKey) {
     weeksKey = key;
     root.innerHTML = ['odd', 'even'].map((week) => `
       <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 dark:bg-slate-900 ${week === current ? 'ring-2 ring-indigo-500' : 'ring-slate-200 dark:ring-slate-800'}">
         <div class="mb-1 flex items-center justify-between">
-          <h3 class="font-semibold">${week === 'odd' ? 'Lichý' : 'Sudý'} týden</h3>
-          ${week === current ? '<span class="rounded-full bg-indigo-600 px-2 py-0.5 text-xs font-semibold text-white">tento týden</span>' : ''}
+          <h3 class="font-semibold">${escapeHtml(t(week === 'odd' ? 'schedule.oddWeek' : 'schedule.evenWeek'))}</h3>
+          ${week === current ? `<span class="rounded-full bg-indigo-600 px-2 py-0.5 text-xs font-semibold text-white">${escapeHtml(t('schedule.thisWeek'))}</span>` : ''}
         </div>
         <div class="grid grid-cols-[2rem_1fr_1fr] gap-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          <span></span><span>Příchod</span><span>Odchod</span>
+          <span></span><span>${escapeHtml(t('field.arrival'))}</span><span>${escapeHtml(t('field.departure'))}</span>
         </div>
         <div class="divide-y divide-slate-100 dark:divide-slate-800">
           ${[1, 2, 3, 4, 5].map((day) => `
             <div class="py-2">
               <div class="grid grid-cols-[2rem_1fr_1fr] items-center gap-2">
-                <span class="font-medium">${WEEKDAY_NAMES[day].slice(0, 2)}</span>
+                <span class="font-medium">${escapeHtml(weekdayName(day).slice(0, 2))}</span>
                 ${['arriveAt', 'leaveAt'].map((field) => `
                 <label class="min-w-0">
-                  <span class="sr-only">${WEEKDAY_NAMES[day]} – ${field === 'arriveAt' ? 'příchod' : 'odchod'} (${PARITY_LABELS[week]} týden)</span>
-                  <input type="time" data-time24 data-optional data-empty-label="${field === 'arriveAt' ? emptyArr : emptyLv}" data-week="${week}" data-day="${day}" data-field="${field}" value="${escapeHtml(settings.schedule[week][day][field])}" class="${fieldCls}">
+                  <span class="sr-only">${escapeHtml(t(field === 'arriveAt' ? 'schedule.srArrival' : 'schedule.srDeparture', { day: weekdayName(day), parity: parityLabel(week) }))}</span>
+                  <input type="time" data-time24 data-optional data-empty-label="${escapeHtml(field === 'arriveAt' ? emptyArr : emptyLv)}" data-week="${week}" data-day="${day}" data-field="${field}" value="${escapeHtml(settings.schedule[week][day][field])}" class="${fieldCls}">
                 </label>`).join('')}
               </div>
               <p data-hours="${week}-${day}" class="tabular mt-1 pl-10 text-xs"></p>
@@ -109,14 +127,15 @@ function renderWeeks(settings, avgRegular) {
       const hoursEl = root.querySelector(`[data-hours="${week}-${day}"]`);
       if (arr !== null && lv !== null) {
         const worked = workedForStay(Math.max(0, lv - arr), rulesFromSettings(settings));
-        hoursEl.innerHTML = `<span class="font-semibold">pevný den · ${h(worked)}</span>`;
-        hoursEl.title = `Od ${toTimeString(arr)} do ${toTimeString(lv)} po odečtení přestávky – den se neprodlužuje`;
+        hoursEl.innerHTML = `<span class="font-semibold">${escapeHtml(t('schedule.fixedDay', { hours: h(worked) }))}</span>`;
+        hoursEl.title = t('schedule.fixedDayTitle', { from: toTimeString(arr), to: toTimeString(lv) });
       } else {
-        const what = arr === null ? 'příchod' : 'odchod';
-        hoursEl.innerHTML = `<span class="text-slate-500 dark:text-slate-400">dopočítá se ${what}${avgRegular != null ? ` · ≈ ${h(avgRegular)}` : ''}</span>`;
-        hoursEl.title = 'Běžný den – hodiny se dopočítají podle měsíce (průměr na běžný den tohoto měsíce)';
+        const what = t(arr === null ? 'schedule.computeArrival' : 'schedule.computeLeave');
+        const avg = avgRegular != null ? ` · ≈ ${h(avgRegular)}` : '';
+        hoursEl.innerHTML = `<span class="text-slate-500 dark:text-slate-400">${escapeHtml(what + avg)}</span>`;
+        hoursEl.title = t('schedule.regularTitle');
       }
-      const w = warnings.filter((x) => x.week === week && x.day === day).map((x) => `⚠ ${x.message}`);
+      const w = warnings.filter((x) => x.week === week && x.day === day).map((x) => `⚠ ${tr(x.message)}`);
       setError(root.querySelector(`[data-warn="${week}-${day}"]`), w.join(' ') || null);
     }
   }
@@ -131,7 +150,7 @@ function onScheduleChange(e) {
   next.schedule[week][day] = { ...next.schedule[week][day], [field]: input.value };
   ctx.saveSettings(next);
   const warn = settingsWarnings(next).some((w) => w.field === 'schedule' && w.week === week && String(w.day) === day);
-  toast(warn ? 'Uloženo – zkontrolujte upozornění' : 'Rozvrh uložen');
+  toast(t(warn ? 'toast.savedCheckWarnings' : 'schedule.saved'));
 }
 
 // ---------------------------------------------------------------------------
@@ -145,23 +164,27 @@ const NUMBER_FIELDS = ['dailyFundHours', 'maxWorkedHoursPerDay', 'breakAfterHour
 function breakRuleText(settings) {
   const rules = rulesFromSettings(settings);
   const stay = stayForWorked(rules.DAILY_FUND_MIN, rules);
-  return `${describeBreakRule(rules)} Na denní fond ${formatMinutes(rules.DAILY_FUND_MIN)} h je tedy potřeba pobyt ${formatMinutes(stay)} h `
-    + (settings.anchorMode === 'arrival'
-      ? `(příchod ${settings.anchorTime} → odchod ${toTimeString(Math.min(1439, parseTime(settings.anchorTime) + stay))}). `
-      : `(příchod ${toTimeString(Math.max(0, parseTime(settings.anchorTime) - stay))} ← odchod ${settings.anchorTime}). `)
-    + 'Pravidlo platí pro výpočet odpracovaných hodin, přesčasů i plánu.';
+  const anchor = parseTime(settings.anchorTime);
+  const example = settings.anchorMode === 'arrival'
+    ? t('settings.breakExampleArr', { arrival: settings.anchorTime, leave: toTimeString(Math.min(1439, anchor + stay)) })
+    : t('settings.breakExampleDep', { arrival: toTimeString(Math.max(0, anchor - stay)), leave: settings.anchorTime });
+  return t('settings.breakText', {
+    rule: describeBreakRule(rules), fund: formatMinutes(rules.DAILY_FUND_MIN), stay: formatMinutes(stay), example,
+  });
 }
 
 const RULE_FIELDS = ['dailyFundHours', 'breakAfterHours', 'breakLengthMinutes'];
 
-const ruleSummary = (v) => `fond ${formatMinutes(Math.round(v.dailyFundHours * 60))} h, přestávka ${v.breakLengthMinutes} min po ${formatMinutes(Math.round(v.breakAfterHours * 60))} h`;
+const ruleSummary = (v) => t('rules.summary', {
+  fund: formatMinutes(Math.round(v.dailyFundHours * 60)), minutes: v.breakLengthMinutes, after: formatMinutes(Math.round(v.breakAfterHours * 60)),
+});
 
 function renderRuleHistory(settings) {
   const el = $('#rule-history');
   const versions = settings.ruleVersions ?? [];
   el.hidden = versions.length < 2;
-  el.innerHTML = versions.length < 2 ? '' : `<li class="font-medium">Platnost pravidel:</li>${versions.map((v) => `
-    <li>${v.from === RULES_SINCE_EVER ? 'původně' : `od ${formatDateShort(v.from)}`}: ${escapeHtml(ruleSummary(v))}</li>`).join('')}`;
+  el.innerHTML = versions.length < 2 ? '' : `<li class="font-medium">${escapeHtml(t('rules.history'))}</li>${versions.map((v) => `
+    <li>${escapeHtml(v.from === RULES_SINCE_EVER ? t('rules.originally') : t('rules.since', { date: formatDateShort(v.from) }))}: ${escapeHtml(ruleSummary(v))}</li>`).join('')}`;
 }
 
 function renderSettingsForm(settings) {
@@ -171,13 +194,14 @@ function renderSettingsForm(settings) {
     if (document.activeElement !== f[name]) f[name].value = settings[name];
   }
   f.anchorMode.value = settings.anchorMode;
+  f.czHolidays.checked = ctx.getState().app?.czHolidays !== false;
   $('#anchor-hint').textContent = settings.anchorMode === 'arrival'
-    ? `Běžný den začíná v ${settings.anchorTime}, odchod se dopočítá a při napracování posouvá (nejpozději ${settings.latestDeparture}).`
-    : `Běžný den končí v ${settings.anchorTime}, příchod se dopočítá a při napracování posouvá dřív (nejdříve ${settings.earliestArrival}).`;
+    ? t('settings.anchorHintArr', { time: settings.anchorTime, limit: settings.latestDeparture })
+    : t('settings.anchorHintDep', { time: settings.anchorTime, limit: settings.earliestArrival });
   $('#break-rule-text').textContent = breakRuleText(settings);
   const warnings = settingsWarnings(settings).filter((w) => w.field !== 'schedule');
   const el = $('#plan-settings-warnings');
-  el.innerHTML = warnings.map((w) => `<li>⚠ ${escapeHtml(w.message)}</li>`).join('');
+  el.innerHTML = warnings.map((w) => `<li>⚠ ${escapeHtml(tr(w.message))}</li>`).join('');
   el.hidden = !warnings.length;
 }
 
@@ -187,18 +211,27 @@ async function onAnchorModeChange() {
   const mode = f.anchorMode.value;
   const { settings: next, changes } = switchAnchorMode(settings, mode);
   if (!changes.length) return;
-  const ok = await confirmDialog(`Přepnout pevný čas na „${ANCHOR_LABELS[mode]}“? Co se změní:\n\n${changes.map((c) => `• ${c}`).join('\n')}`, 'Přepnout', { danger: false });
+  const text = t('settings.switchConfirm', { mode: t(`anchor.${mode}`), changes: changes.map((c) => `• ${tr(c)}`).join('\n') });
+  const ok = await confirmDialog(text, t('settings.switch'), { danger: false });
   if (!ok) {
     f.anchorMode.value = settings.anchorMode;
     return;
   }
   ctx.saveSettings(next);
-  toast(`Pevný čas: ${ANCHOR_LABELS[mode].toLowerCase()} v ${next.anchorTime}`);
+  toast(t('settings.switched', { mode: t(`anchor.${mode}`).toLowerCase(), time: next.anchorTime }));
 }
 
 function onSettingsChange(e) {
   const f = $('#form-plan-settings');
   if (!e.target.name) return;
+  if (e.target.name === 'language') {
+    ctx.changeLanguage(e.target.value);
+    return;
+  }
+  if (e.target.name === 'czHolidays') {
+    openHolidaysDialog(e.target.checked);
+    return;
+  }
   if (e.target.name === 'anchorMode') {
     onAnchorModeChange();
     return;
@@ -207,12 +240,12 @@ function onSettingsChange(e) {
   const raw = { ...settings };
   for (const name of TIME_FIELDS) raw[name] = f[name].value;
   for (const name of NUMBER_FIELDS) raw[name] = f[name].valueAsNumber;
-  const breakErr = !(raw.dailyFundHours > 0 && raw.dailyFundHours <= 24) ? 'Denní fond musí být 0,25–24 h.'
-    : !(raw.breakAfterHours > 0 && raw.breakAfterHours <= 24) ? 'Interval přestávky musí být 0,25–24 h.'
-    : !(Number.isInteger(raw.breakLengthMinutes) && raw.breakLengthMinutes >= 0) ? 'Délka přestávky musí být celý počet minut (0 = bez přestávky).'
-      : raw.breakLengthMinutes >= hoursToMinutes(raw.breakAfterHours) ? 'Přestávka musí být kratší než interval, po kterém se odečítá.'
+  const breakErr = !(raw.dailyFundHours > 0 && raw.dailyFundHours <= 24) ? 'settings.errFund'
+    : !(raw.breakAfterHours > 0 && raw.breakAfterHours <= 24) ? 'settings.errBreakAfter'
+    : !(Number.isInteger(raw.breakLengthMinutes) && raw.breakLengthMinutes >= 0) ? 'settings.errBreakLength'
+      : raw.breakLengthMinutes >= hoursToMinutes(raw.breakAfterHours) ? 'settings.errBreakShorter'
         : null;
-  setError($('#break-rule-error'), breakErr);
+  setError($('#break-rule-error'), breakErr ? t(breakErr) : null);
   if (breakErr) return;
   // Fond a přestávka mění výpočet historie → jen přes potvrzení s datem platnosti.
   const rulePatch = Object.fromEntries(RULE_FIELDS.map((k) => [k, raw[k]]));
@@ -224,13 +257,13 @@ function onSettingsChange(e) {
   const next = normalizeSettings(raw);
   ctx.saveSettings(next);
   const warns = settingsWarnings(next).filter((w) => w.field !== 'schedule');
-  toast(warns.length ? 'Uloženo – zkontrolujte upozornění' : 'Nastavení uloženo');
+  toast(t(warns.length ? 'toast.savedCheckWarnings' : 'settings.saved'));
 }
 
 // ---------------------------------------------------------------------------
-// Změna pravidel výpočtu – ochrana historie
+// Změna pravidel výpočtu – ochrana historie (fond, přestávka, státní svátky)
 // ---------------------------------------------------------------------------
-let rulesChange = null; // { settings, patch }
+let rulesChange = null; // { kind: 'rules', settings, patch } | { kind: 'holidays', enabled }
 
 function rulesDialogNext() {
   const f = $('#form-rules');
@@ -239,23 +272,21 @@ function rulesDialogNext() {
 }
 
 function updateRulesDialog() {
-  const { records, withdrawals } = ctx.getState();
+  if (!rulesChange) return;
+  const { records, withdrawals, settings } = ctx.getState();
   const f = $('#form-rules');
   f.from.disabled = f.scope.value === 'all';
-  const next = rulesDialogNext();
-  const impact = ruleChangeImpact({ records, withdrawals, settings: rulesChange.settings, next });
-  const el = $('#rules-impact');
-  const changed = impact.affectedDays > 0 || impact.balanceAfter !== impact.balanceBefore;
-  el.className = `mt-3 rounded-xl px-3 py-2 text-sm ${changed ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`;
-  el.innerHTML = `${changed ? '⚠ Změna přepočítá uzavřené dny.' : 'Uzavřené dny se nezmění.'}<br>
-    Zůstatek banky: <b class="tabular">${signed(impact.balanceBefore)} h → ${signed(impact.balanceAfter)} h</b><br>
-    Dotčené uzavřené dny: <b class="tabular">${impact.affectedDays}</b>`;
+  const impact = rulesChange.kind === 'holidays'
+    ? holidayChangeImpact({ records, withdrawals, settings, enabled: rulesChange.enabled })
+    : ruleChangeImpact({ records, withdrawals, settings: rulesChange.settings, next: rulesDialogNext() });
+  renderImpact($('#rules-impact'), impact);
 }
 
-function openRulesDialog(settings, patch) {
-  rulesChange = { settings, patch };
-  const cur = settings.ruleVersions[settings.ruleVersions.length - 1];
-  $('#rules-change-text').textContent = `${ruleSummary(cur)} → ${ruleSummary({ ...cur, ...patch })}`;
+/** Otevře dialog dopadu; onOk se zavolá jen po potvrzení, onCancel jinak. */
+function showRulesDialog({ title, text, scoped, onOk, onCancel }) {
+  $('#rules-title').textContent = title;
+  $('#rules-change-text').textContent = text;
+  $('#rules-scope').hidden = !scoped;
   const f = $('#form-rules');
   f.scope.value = 'from';
   f.from.value = todayStr();
@@ -264,30 +295,58 @@ function openRulesDialog(settings, patch) {
   dlg.returnValue = '';
   dlg.showModal();
   dlg.addEventListener('close', () => {
-    if (dlg.returnValue === 'ok') {
-      const next = rulesDialogNext();
-      ctx.saveSettings(next);
-      const from = f.scope.value === 'all' ? 'zpětně pro všechna data' : `od ${formatDateShort(f.from.value || todayStr())}`;
-      toast(`Pravidla uložena (${from})`);
-    } else {
-      renderSettingsForm(ctx.getState().settings); // vrátí pole na uložené hodnoty
-      toast('Změna pravidel zrušena');
-    }
+    if (dlg.returnValue === 'ok') onOk();
+    else onCancel();
     rulesChange = null;
   }, { once: true });
+}
+
+function openRulesDialog(settings, patch) {
+  rulesChange = { kind: 'rules', settings, patch };
+  const cur = settings.ruleVersions[settings.ruleVersions.length - 1];
+  showRulesDialog({
+    title: t('rules.title'),
+    text: `${ruleSummary(cur)} → ${ruleSummary({ ...cur, ...patch })}`,
+    scoped: true,
+    onOk() {
+      const f = $('#form-rules');
+      ctx.saveSettings(rulesDialogNext());
+      const from = f.scope.value === 'all' ? t('rules.savedRetro') : t('rules.since', { date: formatDateShort(f.from.value || todayStr()) });
+      toast(t('rules.saved', { from }));
+    },
+    onCancel() {
+      renderSettingsForm(ctx.getState().settings); // vrátí pole na uložené hodnoty
+      toast(t('rules.cancelled'));
+    },
+  });
+}
+
+/** Zapnutí/vypnutí státních svátků z nastavení – vždy zpětně, jen po potvrzení dopadu. */
+function openHolidaysDialog(enabled) {
+  rulesChange = { kind: 'holidays', enabled };
+  showRulesDialog({
+    title: t(enabled ? 'holidays.enableTitle' : 'holidays.disableTitle'),
+    text: t('holidays.retroText'),
+    scoped: false,
+    onOk: () => ctx.saveHolidays(enabled),
+    onCancel() {
+      renderSettingsForm(ctx.getState().settings);
+      toast(t('rules.cancelled'));
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Plán měsíce
 // ---------------------------------------------------------------------------
 const ROW_STYLE = {
-  done: { row: '', label: 'proběhlo', chip: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
-  filled: { row: 'bg-teal-50/70 dark:bg-teal-950/30', label: 'doplněno', chip: 'bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-200' },
-  missing: { row: 'bg-rose-50/70 dark:bg-rose-950/30', label: 'chybí záznam', chip: 'bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200' },
-  absence: { row: 'bg-sky-50/70 dark:bg-sky-950/30', label: 'nepřítomnost', chip: 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200' },
-  fixed: { row: 'bg-violet-50/70 dark:bg-violet-950/30', label: 'pevný den', chip: 'bg-violet-100 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200' },
-  override: { row: 'bg-amber-50/70 dark:bg-amber-950/30', label: 'výjimka', chip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200' },
-  regular: { row: 'bg-indigo-50/60 dark:bg-indigo-950/30', label: 'plánováno', chip: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200' },
+  done: { row: '', label: 'legend.done', chip: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300' },
+  filled: { row: 'bg-teal-50/70 dark:bg-teal-950/30', label: 'legend.filled', chip: 'bg-teal-100 text-teal-800 dark:bg-teal-900/60 dark:text-teal-200' },
+  missing: { row: 'bg-rose-50/70 dark:bg-rose-950/30', label: 'legend.missing', chip: 'bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200' },
+  absence: { row: 'bg-sky-50/70 dark:bg-sky-950/30', label: 'legend.absence', chip: 'bg-sky-100 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200' },
+  fixed: { row: 'bg-violet-50/70 dark:bg-violet-950/30', label: 'tag.fixedDay', chip: 'bg-violet-100 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200' },
+  override: { row: 'bg-amber-50/70 dark:bg-amber-950/30', label: 'legend.override', chip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200' },
+  regular: { row: 'bg-indigo-50/60 dark:bg-indigo-950/30', label: 'legend.regular', chip: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200' },
   cleared: { row: '', label: '', chip: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
   off: { row: 'text-slate-400 dark:text-slate-600', label: '', chip: '' },
 };
@@ -298,29 +357,28 @@ function styleKey(d) {
   return d.kind;
 }
 
-const chip = (key, text = ROW_STYLE[key].label) => `<span class="inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${ROW_STYLE[key].chip}">${escapeHtml(text)}</span>`;
+const chip = (key, text = t(ROW_STYLE[key].label)) => `<span class="inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${ROW_STYLE[key].chip}">${escapeHtml(text)}</span>`;
 
-/** Který konec dne je pevný z rozvrhu/výjimky. */
+/** Který konec dne je pevný z rozvrhu/výjimky (klíč štítku). */
 function fixedLabel(d) {
-  if (d.explicitArrival && d.explicitLeave) return 'pevné časy';
-  if (d.explicitLeave) return 'pevný odchod';
-  if (d.explicitArrival) return 'pevný příchod';
+  if (d.explicitArrival && d.explicitLeave) return t('tag.fixedTimes');
+  if (d.explicitLeave) return t('tag.fixedLeave');
+  if (d.explicitArrival) return t('tag.fixedArrival');
   return null;
 }
 
-const CLEARED_LABELS = { leave: 'bez pevného odchodu', arrival: 'bez pevného příchodu', both: 'bez pevných časů' };
 const NOTE_ICON = '📝';
 
 function typeText(d) {
-  if (!d.workday && d.kind === 'off') return d.holiday ? escapeHtml(d.holiday) : 'víkend';
+  if (!d.workday && d.kind === 'off') return escapeHtml(d.holiday ? t(d.holiday) : t('common.weekend'));
   const parts = [];
-  if (d.clearedFixed) parts.push(chip('cleared', CLEARED_LABELS[d.clearedFixed]));
-  if (d.note) parts.push(`<button type="button" data-toggle-note="${d.date}" class="inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${ROW_STYLE.override.chip}" title="${escapeHtml(d.note)}">${NOTE_ICON} poznámka</button>`);
+  if (d.clearedFixed) parts.push(chip('cleared', t(`tag.cleared.${d.clearedFixed}`)));
+  if (d.note) parts.push(`<button type="button" data-toggle-note="${d.date}" class="inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium ${ROW_STYLE.override.chip}" title="${escapeHtml(d.note)}">${NOTE_ICON} ${escapeHtml(t('tag.note'))}</button>`);
   if (d.type && d.type !== DAY_TYPES.WORK) {
-    parts.push(escapeHtml(DAY_TYPE_LABELS[d.type]) + (d.absence && d.absence < d.credited ? ` ${formatMinutes(d.absence)} h` : ''));
+    parts.push(escapeHtml(typeLabel(d.type)) + (d.absence && d.absence < d.credited ? ` ${formatMinutes(d.absence)} h` : ''));
   }
   const fixed = fixedLabel(d);
-  if (d.kind === 'fixed') parts.push(chip(styleKey(d), styleKey(d) === 'fixed' ? fixed ?? (d.actualArrival ? 'dnešní příchod' : 'pevný den') : undefined));
+  if (d.kind === 'fixed') parts.push(chip(styleKey(d), styleKey(d) === 'fixed' ? fixed ?? t(d.actualArrival ? 'tag.todayArrival' : 'tag.fixedDay') : undefined));
   else parts.push(chip(styleKey(d)));
   if (fixed && (d.kind !== 'fixed' || styleKey(d) !== 'fixed')) parts.push(chip('fixed', fixed));
   return parts.join(' ');
@@ -329,7 +387,7 @@ function typeText(d) {
 /** Příchod/odchod: skutečnost normálně, plán tlumeně. */
 function timeCell(actual, planned) {
   if (actual) return `<span>${escapeHtml(actual)}</span>`;
-  if (planned) return `<span class="italic text-slate-400 dark:text-slate-500" title="plán">${planned}</span>`;
+  if (planned) return `<span class="italic text-slate-400 dark:text-slate-500" title="${escapeHtml(t('table.planned'))}">${planned}</span>`;
   return '';
 }
 
@@ -341,18 +399,18 @@ function actualText(d) {
 /** Celý popis dne do tooltipu řádku. */
 function rowTitle(d) {
   const r = d.record;
-  const parts = [`Týden ${d.week} · ${PARITY_LABELS[d.parity]}`];
-  if (r?.arrival) parts.push(`skutečnost ${r.arrival}–${r.departure ?? '…'}`);
-  if (d.plannedLeave) parts.push(`plán: příchod ${d.arrival}, odchod ${d.plannedLeave}`);
-  return [...parts, ...d.warnings].join(' · ');
+  const parts = [t('week.badge', { week: d.week, parity: parityLabel(d.parity) })];
+  if (r?.arrival) parts.push(t('table.actualTimes', { from: r.arrival, to: r.departure ?? '…' }));
+  if (d.plannedLeave) parts.push(t('table.plannedTimes', { arrival: d.arrival, leave: d.plannedLeave }));
+  return [...parts, ...d.warnings.map(tr)].join(' · ');
 }
 
 function summaryCard(label, value, sub = '', cls = '') {
   return `
     <div class="rounded-2xl bg-white p-3 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-      <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">${label}</p>
+      <p class="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">${escapeHtml(label)}</p>
       <p class="tabular mt-0.5 text-lg font-bold ${cls}">${value}</p>
-      ${sub ? `<p class="text-[11px] text-slate-500 dark:text-slate-400">${sub}</p>` : ''}
+      ${sub ? `<p class="text-[11px] text-slate-500 dark:text-slate-400">${escapeHtml(sub)}</p>` : ''}
     </div>`;
 }
 
@@ -366,36 +424,37 @@ function currentPlan(overridesPatch = null) {
 function renderMonthPlan() {
   const plan = currentPlan();
   const { summary: s } = plan;
-  $('#plan-month-title').textContent = `${MONTH_LABELS[planMonth.m - 1]} ${planMonth.y}`;
+  $('#plan-month-title').textContent = formatMonthYear(planMonth.y, planMonth.m);
   const devTone = s.deviation === 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
   $('#plan-summary').innerHTML = [
-    summaryCard('Fond', h(s.fund)),
-    summaryCard('Odpracováno', h(s.worked), 'skutečnost'),
-    summaryCard('Plán zbývá', h(s.planRemaining)),
-    summaryCard('Předpoklad', h(s.projected), 'konec měsíce'),
-    summaryCard('Odchylka', `${signed(s.deviation)} h`, 'od fondu', devTone),
-    summaryCard('Průměr', s.averageRegular != null ? h(s.averageRegular) : '—', `na běžný den (${s.regularDays})`),
+    summaryCard(t('summary.fund'), h(s.fund)),
+    summaryCard(t('summary.worked'), h(s.worked), t('summary.workedSub')),
+    summaryCard(t('summary.remaining'), h(s.planRemaining)),
+    summaryCard(t('summary.projected'), h(s.projected), t('summary.projectedSub')),
+    summaryCard(t('summary.deviation'), `${signed(s.deviation)} h`, t('summary.deviationSub'), devTone),
+    summaryCard(t('summary.average'), s.averageRegular != null ? h(s.averageRegular) : '—', t('summary.averageSub', { count: s.regularDays })),
   ].join('');
 
   const warnEl = $('#plan-warnings');
-  warnEl.innerHTML = plan.warnings.map((w) => `<li>⚠ ${escapeHtml(w)}</li>`).join('');
+  warnEl.innerHTML = plan.warnings.map((w) => `<li>⚠ ${escapeHtml(tr(w))}</li>`).join('');
   warnEl.hidden = !plan.warnings.length;
 
   const candidates = fillCandidatesFor();
   const bulk = $('#btn-bulk-fill');
   bulk.hidden = !candidates.length;
-  bulk.textContent = `Doplnit docházku (${candidates.length} ${plural(candidates.length, ['den', 'dny', 'dnů'])})`;
+  bulk.textContent = t('fill.bulkButton', { count: candidates.length });
 
   const today = todayStr();
   $('#plan-table tbody').innerHTML = plan.days.map((d) => {
     const key = styleKey(d);
     const dayNum = Number(d.date.slice(8));
-    const warnLabel = d.warnings.some((w) => w.includes(CORE_WARNING)) ? 'pevná doba' : 'upozornění';
-    const warn = d.warnings.length ? `<span class="block text-[11px] text-amber-700 dark:text-amber-400">⚠ ${warnLabel}</span>` : '';
+    const warnLabel = t(d.warnings.some((w) => CORE_WARNING_KEYS.has(w.key)) ? 'table.warnCore' : 'table.warn');
+    const warn = d.warnings.length ? `<span class="block text-[11px] text-amber-700 dark:text-amber-400">⚠ ${escapeHtml(warnLabel)}</span>` : '';
+    const parityShort = t(`parity.short.${d.parity}`);
     return `
       <tr data-plan-date="${d.date}" title="${escapeHtml(rowTitle(d))}" class="cursor-pointer border-t border-slate-100 hover:brightness-95 dark:border-slate-800 ${ROW_STYLE[key].row} ${d.date === today ? 'font-semibold outline outline-2 -outline-offset-2 outline-indigo-500' : ''}">
-        <td class="whitespace-nowrap px-2 py-2"><span class="tabular">${dayNum}.</span> <span class="text-[11px] text-slate-500 dark:text-slate-400">${weekdayLabel(d.date)}</span>
-          <span class="ml-0.5 rounded px-1 text-[10px] font-bold ${d.parity === 'odd' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200' : 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200'}" title="Týden ${d.week} · ${PARITY_LABELS[d.parity]}">${d.parity === 'odd' ? 'L' : 'S'}</span></td>
+        <td class="whitespace-nowrap px-2 py-2"><span class="tabular">${dayNum}.</span> <span class="text-[11px] text-slate-500 dark:text-slate-400">${escapeHtml(weekdayShort(d.date))}</span>
+          <span class="ml-0.5 rounded px-1 text-[10px] font-bold ${d.parity === 'odd' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200' : 'bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-200'}" title="${escapeHtml(t('week.badge', { week: d.week, parity: parityLabel(d.parity) }))}">${escapeHtml(parityShort)}</span></td>
         <td class="px-1 py-2 text-xs">${typeText(d)}${warn}</td>
         <td class="tabular whitespace-nowrap px-1.5 py-2 text-right">${timeCell(d.record?.arrival, d.plannedWorked !== null ? d.arrival : null)}</td>
         <td class="tabular whitespace-nowrap px-1.5 py-2 text-right">${timeCell(d.record?.departure, d.plannedWorked !== null ? d.plannedLeave : null)}</td>
@@ -426,8 +485,8 @@ function fillCandidatesFor() {
 }
 
 function describeFill(rec) {
-  if (!rec.arrival) return DAY_TYPE_LABELS[rec.type];
-  const abs = rec.absenceHours ? ` + ${DAY_TYPE_LABELS[rec.type].toLowerCase()} ${formatMinutes(Math.round(rec.absenceHours * 60))} h` : '';
+  if (!rec.arrival) return typeLabel(rec.type);
+  const abs = rec.absenceHours ? ` + ${typeLabel(rec.type).toLowerCase()} ${formatMinutes(Math.round(rec.absenceHours * 60))} h` : '';
   return `${rec.arrival}–${rec.departure}${abs}`;
 }
 
@@ -436,10 +495,10 @@ function openBulkFill() {
   if (!list.length) return;
   $('#fill-list').innerHTML = list.map((c) => `
     <li class="flex items-center justify-between gap-3 py-2">
-      <span>${formatDateShort(c.date)} <span class="text-xs text-slate-500 dark:text-slate-400">${weekdayLabel(c.date)}</span></span>
-      <span class="tabular text-right font-medium">${escapeHtml(describeFill(c.record))}${c.before?.arrival ? '<span class="block text-[11px] font-normal text-slate-500">příchod zachován</span>' : ''}</span>
+      <span>${formatDateShort(c.date)} <span class="text-xs text-slate-500 dark:text-slate-400">${escapeHtml(weekdayShort(c.date))}</span></span>
+      <span class="tabular text-right font-medium">${escapeHtml(describeFill(c.record))}${c.before?.arrival ? `<span class="block text-[11px] font-normal text-slate-500">${escapeHtml(t('fill.arrivalKept'))}</span>` : ''}</span>
     </li>`).join('');
-  $('#fill-count').textContent = `Vytvoří se ${list.length} ${plural(list.length, ['záznam označený', 'záznamy označené', 'záznamů označených'])} „doplněno“. Každý den vyjde přesně do fondu.`;
+  $('#fill-count').textContent = t('fill.count', { count: list.length });
   const dlg = $('#dlg-fill');
   dlg.returnValue = '';
   dlg.showModal();
@@ -450,8 +509,8 @@ function openBulkFill() {
       const err = ctx.saveRecord(c.record);
       if (err) errors.push(`${formatDateShort(c.date)}: ${err}`);
     }
-    if (errors.length) toast(`Některé dny se nedoplnily – ${errors.join('; ')}`, 'error');
-    else toast(`Doplněno: ${list.length} ${plural(list.length, ['den', 'dny', 'dnů'])}`);
+    if (errors.length) toast(t('fill.someFailed', { errors: errors.join('; ') }), 'error');
+    else toast(t('fill.done', { count: list.length }));
   }, { once: true });
 }
 
@@ -483,21 +542,38 @@ function updateOverrideDialog() {
   $('#ov-note-count').textContent = `${f.note.value.length}/${NOTE_MAX}`;
   const { settings } = ctx.getState();
   const { error, warnings } = validateOverride(ov, settings);
-  setError($('#ov-error'), error);
+  setError($('#ov-error'), error ? tr(error) : null);
   $('#ov-save').disabled = Boolean(error);
   const w = $('#ov-warnings');
-  w.innerHTML = warnings.map((x) => `<li>⚠ ${escapeHtml(x)}</li>`).join('');
+  w.innerHTML = warnings.map((x) => `<li>⚠ ${escapeHtml(tr(x))}</li>`).join('');
   w.hidden = !warnings.length;
 
   if (!error) {
     const plan = currentPlan(isEmptyOverride(ov) ? { date: overrideDate, remove: true } : ov);
     const d = plan.days.find((x) => x.date === overrideDate);
     const parts = [];
-    if (d.kind === 'absence') parts.push(`Celý den ${DAY_TYPE_LABELS[d.type].toLowerCase()} (${h(d.credited)})`);
-    else if (d.plannedWorked !== null) parts.push(`Plán: ${h(d.plannedWorked)} práce${d.absence ? ` + ${h(d.absence)} nepřítomnost` : ''}, ${d.arrival ?? '—'}–${d.plannedLeave ?? '—'}${d.kind === 'regular' ? ' (dopočítáno)' : ''}`);
-    parts.push(plan.summary.unbalanced ? plan.warnings[0] : 'Měsíc vyjde na nulu.');
+    if (d.kind === 'absence') parts.push(t('ov.previewAbsence', { type: typeLabel(d.type).toLowerCase(), hours: h(d.credited) }));
+    else if (d.plannedWorked !== null) {
+      parts.push(t('ov.previewPlan', {
+        hours: h(d.plannedWorked),
+        absence: d.absence ? t('ov.previewPlanAbsence', { hours: h(d.absence) }) : '',
+        from: d.arrival ?? '—',
+        to: d.plannedLeave ?? '—',
+        computed: d.kind === 'regular' ? t('ov.previewComputed') : '',
+      }));
+    }
+    parts.push(plan.summary.unbalanced ? tr(plan.warnings[0]) : t('ov.previewBalanced'));
     $('#ov-preview').textContent = parts.join(' · ');
   }
+}
+
+function absenceOptions() {
+  const select = $('#form-override').absenceType;
+  const value = select.value;
+  select.innerHTML = `<option value="">${escapeHtml(t('ov.noAbsence'))}</option>${
+    [DAY_TYPES.VACATION, DAY_TYPES.SICK, DAY_TYPES.DOCTOR, DAY_TYPES.COMP]
+      .map((type) => `<option value="${type}">${escapeHtml(typeLabel(type))}</option>`).join('')}`;
+  select.value = value;
 }
 
 export function openOverrideDialog(date) {
@@ -513,18 +589,24 @@ export function openOverrideDialog(date) {
   f.note.value = ov?.note ?? '';
   // zrušit lze jen pevný čas, který rozvrh pro tento den má
   const sched = scheduledDay(date, settings);
-  for (const [field, name, key] of [['arriveAt', 'clearArrival', 'arrival'], ['leaveAt', 'clearLeave', 'leave']]) {
+  for (const [field, name] of [['arriveAt', 'clearArrival'], ['leaveAt', 'clearLeave']]) {
+    const key = name === 'clearArrival' ? 'arrival' : 'leave';
     const has = Boolean(sched[field]);
     f[name].disabled = !has;
     f[name].checked = has && (ov?.clearFixed === key || ov?.clearFixed === 'both');
-    $(`#${name === 'clearArrival' ? 'ov-clear-arrival' : 'ov-clear-leave'}-time`).textContent = has ? `(${sched[field]})` : '(rozvrh ho nemá)';
-    $(`#${name === 'clearArrival' ? 'ov-clear-arrival' : 'ov-clear-leave'}-wrap`).classList.toggle('opacity-50', !has);
+    $(`#ov-clear-${key}-time`).textContent = has ? `(${sched[field]})` : t('ov.notInSchedule');
+    $(`#ov-clear-${key}-wrap`).classList.toggle('opacity-50', !has);
   }
-  const schedText = [sched.arriveAt && `příchod ${sched.arriveAt}`, sched.leaveAt && `odchod ${sched.leaveAt}`].filter(Boolean).join(', ');
-  $('#ov-schedule').textContent = `Rozvrh: ${schedText || 'bez pevných časů'} · kotva: ${settings.anchorMode === 'arrival' ? 'příchod' : 'odchod'} ${settings.anchorTime}`;
+  const schedText = [
+    sched.arriveAt && t('ov.schedArrival', { time: sched.arriveAt }),
+    sched.leaveAt && t('ov.schedLeave', { time: sched.leaveAt }),
+  ].filter(Boolean).join(', ');
+  $('#ov-schedule').textContent = t('ov.schedule', {
+    schedule: schedText || t('ov.noFixedTimes'), anchor: t(`anchor.${settings.anchorMode}`).toLowerCase(), time: settings.anchorTime,
+  });
   $('#ov-title').textContent = formatDateLong(date);
   const { week } = isoWeek(date);
-  $('#ov-sub').textContent = `Výjimka dne · týden ${week} (${PARITY_LABELS[weekParity(date, settings.parityFlip)]})`;
+  $('#ov-sub').textContent = t('ov.sub', { week, parity: parityLabel(weekParity(date, settings.parityFlip)) });
   $('#ov-delete').hidden = !ov;
   updateOverrideDialog();
   $('#dlg-override').showModal();
@@ -533,7 +615,7 @@ export function openOverrideDialog(date) {
 // ---------------------------------------------------------------------------
 // Hromadné zrušení pevných časů (s vrácením jedním krokem)
 // ---------------------------------------------------------------------------
-let lastBulk = null; // { ops, text }
+let lastBulk = null; // { ops, what, from, to }
 
 function bulkClearOps() {
   const f = $('#form-bulk-clear');
@@ -545,8 +627,8 @@ function updateBulkClear() {
   const f = $('#form-bulk-clear');
   const ops = f.from.value && f.to.value && f.from.value <= f.to.value ? bulkClearOps() : [];
   $('#bulk-clear-preview').textContent = ops.length
-    ? `Dotčené dny (${ops.length}): ${ops.map((o) => formatDateShort(o.date)).join(', ')}`
-    : 'V rozsahu není žádný dnešní ani budoucí pracovní den s tímto pevným časem v rozvrhu.';
+    ? t('bulk.preview', { count: ops.length, dates: ops.map((o) => formatDateShort(o.date)).join(', ') })
+    : t('bulk.none');
   $('#bulk-clear-ok').disabled = !ops.length;
 }
 
@@ -565,21 +647,24 @@ function openBulkClear() {
     const ops = bulkClearOps();
     if (!ops.length) return;
     ctx.applyOverrides(ops.map((o) => ({ date: o.date, data: o.after })));
-    const what = { leave: 'pevný odchod', arrival: 'pevný příchod', both: 'pevné časy' }[f.what.value];
-    lastBulk = { ops, text: `Zrušen ${what} pro ${ops.length} ${plural(ops.length, ['den', 'dny', 'dnů'])} (${formatDateShort(f.from.value)} – ${formatDateShort(f.to.value)}).` };
+    lastBulk = { ops, what: f.what.value, from: f.from.value, to: f.to.value };
     renderBulkUndo();
   }, { once: true });
 }
 
 function renderBulkUndo() {
   $('#bulk-undo').hidden = !lastBulk;
-  if (lastBulk) $('#bulk-undo-text').textContent = lastBulk.text;
+  if (lastBulk) {
+    $('#bulk-undo-text').textContent = t('bulk.done', {
+      what: t(`bulk.${lastBulk.what}`), count: lastBulk.ops.length, from: formatDateShort(lastBulk.from), to: formatDateShort(lastBulk.to),
+    });
+  }
 }
 
 function undoBulk() {
   if (!lastBulk) return;
   ctx.applyOverrides(lastBulk.ops.map((o) => ({ date: o.date, data: o.before })));
-  toast('Hromadné zrušení vráceno');
+  toast(t('bulk.undone'));
   lastBulk = null;
   renderBulkUndo();
 }
@@ -589,10 +674,8 @@ function undoBulk() {
 // ---------------------------------------------------------------------------
 export function initPlanView(context) {
   ctx = context;
-  const absenceSelect = $('#form-override').absenceType;
-  absenceSelect.innerHTML = `<option value="">— bez nepřítomnosti —</option>${
-    [DAY_TYPES.VACATION, DAY_TYPES.SICK, DAY_TYPES.DOCTOR, DAY_TYPES.COMP]
-      .map((t) => `<option value="${t}">${escapeHtml(DAY_TYPE_LABELS[t])}</option>`).join('')}`;
+  absenceOptions();
+  onLanguageChange(absenceOptions);
 
   $('#plan-weeks').addEventListener('change', onScheduleChange);
   $('#form-plan-settings').addEventListener('change', onSettingsChange);
@@ -600,8 +683,8 @@ export function initPlanView(context) {
   $('#btn-plan-prev').addEventListener('click', () => shiftPlanMonth(-1));
   $('#btn-plan-next').addEventListener('click', () => shiftPlanMonth(1));
   $('#btn-plan-today').addEventListener('click', () => {
-    const t = new Date();
-    planMonth = { y: t.getFullYear(), m: t.getMonth() + 1 };
+    const d = new Date();
+    planMonth = { y: d.getFullYear(), m: d.getMonth() + 1 };
     renderMonthPlan();
   });
   $('#btn-bulk-fill').addEventListener('click', openBulkFill);
@@ -642,18 +725,18 @@ export function initPlanView(context) {
     }
     if (isEmptyOverride(ov)) {
       ctx.deleteOverride(overrideDate);
-      toast('Výjimka zrušena – den je podle rozvrhu');
+      toast(t('ov.deleted'));
       return;
     }
     ctx.saveOverride(ov);
-    toast(validateOverride(ov, ctx.getState().settings).warnings.length ? 'Výjimka uložena – zkontrolujte upozornění' : 'Výjimka uložena');
+    toast(t(validateOverride(ov, ctx.getState().settings).warnings.length ? 'ov.savedWarnings' : 'ov.saved'));
   });
   $('#ov-delete').addEventListener('click', async () => {
     const date = overrideDate;
     $('#dlg-override').close();
-    if (!(await confirmDialog(`Zrušit výjimku pro ${formatDateShort(date)}? Den se vrátí do stavu podle rozvrhu (smaže se i poznámka k plánu).`, 'Zrušit výjimku'))) return;
+    if (!(await confirmDialog(t('ov.confirmDelete', { date: formatDateShort(date) }), t('ov.delete')))) return;
     ctx.deleteOverride(date);
-    toast('Výjimka zrušena – den je podle rozvrhu');
+    toast(t('ov.deleted'));
   });
 }
 
@@ -661,11 +744,12 @@ export function renderPlanView() {
   const { settings } = ctx.getState();
   $('#plan-week').innerHTML = weekBadgeHtml(settings);
   // průměr běžného dne aktuálního měsíce pro rozvrh
-  const t = new Date();
+  const d = new Date();
   const { records, overrides } = ctx.getState();
-  const cur = buildMonthPlan({ year: t.getFullYear(), month: t.getMonth() + 1, today: todayStr(), settings, records, overrides });
+  const cur = buildMonthPlan({ year: d.getFullYear(), month: d.getMonth() + 1, today: todayStr(), settings, records, overrides });
   renderWeeks(settings, cur.summary.averageRegular);
   renderSettingsForm(settings);
   renderMonthPlan();
+  renderBulkUndo();
   if ($('#dlg-override').open) updateOverrideDialog();
 }

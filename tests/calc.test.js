@@ -6,7 +6,8 @@ import {
   RULES, DAY_TYPES, parseTime, formatMinutes, parseDate, breakMinutes, stayMinutes,
   workedMinutes, dayResult, isWorkday, holidayName, easterSunday, czechHolidays,
   workdaysInMonth, monthFund, monthSummary, bankBalance, validateWithdrawal, validateDay,
-  hoursToMinutes, formatHoursDecimal, toRules, describeBreakRule, rulesForDate,
+  hoursToMinutes, formatHoursDecimal, toRules, describeBreakRule, rulesForDate, configureHolidays,
+  holidaysEnabled, dayFund,
 } from '../js/calc.js';
 import { buildMonthCsv } from '../js/csv.js';
 
@@ -31,6 +32,7 @@ test('parseTime / formatMinutes', () => {
   assert.equal(formatMinutes(-15, { sign: true }), '−0:15');
   assert.equal(formatMinutes(0, { sign: true }), '+0:00');
   assert.equal(formatHoursDecimal(510), '8,50');
+  assert.equal(formatHoursDecimal(510, '.'), '8.50');
 });
 
 test('parseDate validuje datum', () => {
@@ -109,8 +111,9 @@ test('Velikonoce a svátky ČR', () => {
   assert.equal(easterSunday(2024), '2024-03-31');
   assert.equal(easterSunday(2025), '2025-04-20');
   assert.equal(easterSunday(2026), '2026-04-05');
-  assert.equal(holidayName('2025-04-18'), 'Velký pátek');
-  assert.equal(holidayName('2025-04-21'), 'Velikonoční pondělí');
+  assert.equal(holidayName('2025-04-18'), 'holiday.goodFriday');
+  assert.equal(holidayName('2025-04-21'), 'holiday.easterMonday');
+  assert.equal(holidayName('2025-12-24'), 'holiday.christmasEve');
   assert.equal(holidayName('2025-04-22'), null);
   assert.equal(czechHolidays(2025).size, 13);
   assert.equal(czechHolidays(2015).size, 12); // před zavedením Velkého pátku
@@ -163,27 +166,26 @@ test('banka přesčasů: přesčasy − náhradní volno − výběry', () => {
 test('validace výběru z banky', () => {
   assert.equal(validateWithdrawal(60, 120), null);
   assert.equal(validateWithdrawal(120, 120), null);
-  assert.match(validateWithdrawal(121, 120), /Nelze vybrat/);
-  assert.match(validateWithdrawal(0, 120), /kladný/);
-  assert.match(validateWithdrawal(NaN, 120), /kladný/);
+  assert.deepEqual(validateWithdrawal(121, 120), { key: 'error.withdrawOverBalance', params: { amount: '2:01', balance: '2:00' } });
+  assert.equal(validateWithdrawal(0, 120).key, 'error.withdrawPositive');
+  assert.equal(validateWithdrawal(NaN, 120).key, 'error.withdrawPositive');
   assert.equal(hoursToMinutes('1.5'), 90);
 });
 
 test('validace dne', () => {
   assert.equal(validateDay({ date: '2025-03-03', type: 'work', arrival: '08:00', departure: '16:30' }), null);
-  assert.match(validateDay({ date: '2025-03-03', type: 'work', arrival: '16:00', departure: '08:00' }), /dříve/);
-  assert.match(validateDay({ date: '2025-03-03', type: 'work', arrival: null, departure: '08:00' }), /příchod/);
-  assert.match(validateDay({ date: '2025-02-30', type: 'work' }), /datum/);
-  assert.match(validateDay({ date: '2025-03-03', type: 'comp' }, 100), /chybí/);
+  assert.equal(validateDay({ date: '2025-03-03', type: 'work', arrival: '16:00', departure: '08:00' }).key, 'error.departureBeforeArrival');
+  assert.equal(validateDay({ date: '2025-03-03', type: 'work', arrival: null, departure: '08:00' }).key, 'error.arrivalFirst');
+  assert.equal(validateDay({ date: '2025-02-30', type: 'work' }).key, 'error.invalidDate');
+  assert.equal(validateDay({ date: '2025-03-03', type: 'nonsense' }).key, 'error.unknownType');
+  assert.deepEqual(validateDay({ date: '2025-03-03', type: 'comp' }, 100), { key: 'error.compMissing', params: { missing: '6:20' } });
   assert.equal(validateDay({ date: '2025-03-03', type: 'comp' }, 480), null);
   assert.equal(validateDay({ date: '2025-03-01', type: 'comp' }, 0), null); // víkend nic nečerpá
 });
 
-test('CSV: BOM, středník, CRLF, escapování', () => {
-  const csv = buildMonthCsv(
-    [...records, { date: '2025-03-11', type: 'work', arrival: '08:00', departure: '16:30', note: 'Porada; "důležitá"' }],
-    withdrawals, 2025, 3,
-  );
+test('CSV: BOM, středník, CRLF, escapování, hlavičky a desetinná čárka podle jazyka', () => {
+  const all = [...records, { date: '2025-03-11', type: 'work', arrival: '08:00', departure: '16:30', note: 'Porada; "důležitá"' }];
+  const csv = buildMonthCsv(all, withdrawals, 2025, 3);
   assert.ok(csv.startsWith('﻿Datum;Den;Typ;'));
   assert.ok(csv.includes('\r\n'));
   assert.ok(csv.includes('03.03.2025;Po;Pracovní;07:00;17:00;10:00;0:30;9:30;1:30;1,50;'));
@@ -191,6 +193,21 @@ test('CSV: BOM, středník, CRLF, escapování', () => {
   assert.ok(csv.includes('"Porada; ""důležitá"""'));
   assert.ok(!csv.includes('28.02.2025'));
   assert.ok(csv.includes('Fond;168:00'));
+  assert.ok(csv.includes('Souhrn Březen 2025'));
+  // anglicky: hlavičky, ISO datum, desetinná tečka, stále středník a BOM
+  const en = buildMonthCsv(all, withdrawals, 2025, 3, undefined, { lang: 'en' });
+  assert.ok(en.startsWith('﻿Date;Day;Type;Arrival;Departure;'));
+  assert.ok(en.includes('2025-03-03;Mon;Work;07:00;17:00;10:00;0:30;9:30;1:30;1.50;'));
+  assert.ok(en.includes('2025-03-06;Thu;Time off in lieu;;;;;8:00;-8:00;-8.00;'));
+  assert.ok(en.includes('Required;168:00'));
+  assert.ok(en.includes('Summary March 2025'));
+  assert.ok(!/[ěščřžůú]/.test(en.replace('Porada; ""důležitá""', '')));
+});
+
+test('CSV: svátek v poznámce podle jazyka', () => {
+  const rec = [{ date: '2025-12-24', type: 'work', arrival: '08:00', departure: '12:00' }];
+  assert.ok(buildMonthCsv(rec, [], 2025, 12).includes('Štědrý den'));
+  assert.ok(buildMonthCsv(rec, [], 2025, 12, undefined, { lang: 'en' }).includes('Christmas Eve'));
 });
 
 test('nastavitelné pravidlo přestávky (výchozí beze změny)', () => {
@@ -207,8 +224,8 @@ test('nastavitelné pravidlo přestávky (výchozí beze změny)', () => {
   assert.equal(res.overtime, -30);
   // bez přestávky
   assert.equal(dayResult({ date: '2025-03-03', type: 'work', arrival: '07:00', departure: '15:00' }, { BREAK_MIN: 0 }).overtime, 0);
-  assert.match(describeBreakRule(), /každých celých 6:00 h pobytu se odečte 30 min/);
-  assert.match(describeBreakRule({ BREAK_MIN: 0 }), /neodečítá/);
+  assert.deepEqual(describeBreakRule(), { key: 'break.rule', params: { interval: '6:00', minutes: 30 } });
+  assert.deepEqual(describeBreakRule({ BREAK_MIN: 0 }), { key: 'break.none' });
   // bez pravidel = původní výsledky
   assert.equal(bankBalance(records, withdrawals), bankBalance(records, withdrawals, {}));
 });
@@ -229,4 +246,48 @@ test('verzovaná pravidla: starší dny podle původních pravidel', () => {
   // fond března: 5 dnů po 8 h (3.–7.) + 16 dnů po 7:30
   assert.equal(monthFund(2025, 3, rules), 5 * 480 + 16 * 450);
   assert.equal(monthFund(2025, 3), 21 * 480);
+});
+
+// ---------------------------------------------------------------------------
+// České státní svátky: zapnuté (výchozí) i vypnuté
+// ---------------------------------------------------------------------------
+function withHolidays(enabled, fn) {
+  const was = holidaysEnabled();
+  configureHolidays({ enabled });
+  try {
+    return fn();
+  } finally {
+    configureHolidays({ enabled: was });
+  }
+}
+
+test('svátky zapnuté (výchozí): svátek není pracovní den a nemá fond', () => {
+  assert.equal(holidaysEnabled(), true);
+  assert.equal(holidayName('2025-12-24'), 'holiday.christmasEve');
+  assert.equal(isWorkday('2025-12-24'), false);
+  assert.equal(dayFund('2025-12-24'), 0);
+  assert.equal(workdaysInMonth(2025, 12), 20);
+  assert.equal(monthFund(2025, 12), 20 * 8 * H);
+  assert.equal(dayResult({ date: '2025-12-24', type: 'work', arrival: '08:00', departure: '14:00' }).overtime, 5.5 * H);
+});
+
+test('svátky vypnuté: výpočty se chovají, jako by svátky neexistovaly', () => {
+  withHolidays(false, () => {
+    assert.equal(holidayName('2025-12-24'), null);
+    assert.equal(holidayName('2025-04-18'), null);
+    assert.equal(isWorkday('2025-12-24'), true);
+    assert.equal(isWorkday('2025-12-27'), false);          // sobota zůstává víkendem
+    assert.equal(dayFund('2025-12-24'), 8 * H);
+    assert.equal(workdaysInMonth(2025, 12), 23);           // 23 po–pá
+    assert.equal(workdaysInMonth(2025, 4), 22);
+    assert.equal(monthFund(2025, 12), 23 * 8 * H);
+    // den ve „svátek“ je běžný pracovní den: 08:00–14:00 = 5:30 → −2:30
+    assert.equal(dayResult({ date: '2025-12-24', type: 'work', arrival: '08:00', departure: '14:00' }).overtime, -2.5 * H);
+    assert.equal(dayResult({ date: '2025-12-24', type: 'vacation' }).credited, 8 * H);
+    assert.equal(monthSummary([], 2025, 12).workdays, 23);
+  });
+  // po vrácení zase platí
+  assert.equal(isWorkday('2025-12-24'), false);
+  // seznam svátků (czechHolidays) je nezávislý na nastavení
+  withHolidays(false, () => assert.equal(czechHolidays(2025).size, 13));
 });

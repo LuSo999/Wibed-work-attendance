@@ -2,6 +2,7 @@
 //   users/{uid}/attendance/{YYYY-MM-DD}  – záznam dne
 //   users/{uid}/overtimeBank/{autoId}    – výběr náhradního volna z banky
 //   users/{uid}/settings/plan            – nastavení plánu docházky
+//   users/{uid}/settings/app             – nastavení aplikace {language, czHolidays, onboardingDone}
 //   users/{uid}/planOverrides/{YYYY-MM-DD} – výjimky dnů pro plán
 import {
   collection, doc, onSnapshot, setDoc, deleteDoc, addDoc, serverTimestamp, writeBatch,
@@ -12,13 +13,14 @@ const attendanceCol = (uid) => collection(db, 'users', uid, 'attendance');
 const bankCol = (uid) => collection(db, 'users', uid, 'overtimeBank');
 const overridesCol = (uid) => collection(db, 'users', uid, 'planOverrides');
 const settingsDoc = (uid) => doc(db, 'users', uid, 'settings', 'plan');
+const appSettingsDoc = (uid) => doc(db, 'users', uid, 'settings', 'app');
 
 /**
  * Živě sleduje docházku i výběry. Callbacky dostávají kompletní pole dat.
  * Vrací funkci pro odhlášení odběru.
  */
 export function subscribe(uid, {
-  onAttendance, onBank, onSettings, onOverrides, onError,
+  onAttendance, onBank, onSettings, onOverrides, onAppSettings, onError,
 }) {
   const unsubs = [
     onSnapshot(attendanceCol(uid), (snap) => {
@@ -32,6 +34,10 @@ export function subscribe(uid, {
     }, onError),
     onSnapshot(overridesCol(uid), (snap) => {
       onOverrides(snap.docs.map((d) => ({ ...d.data(), date: d.id })));
+    }, onError),
+    // s metadaty: chybějící dokument je jistý až po odpovědi serveru (fromCache: false)
+    onSnapshot(appSettingsDoc(uid), { includeMetadataChanges: true }, (snap) => {
+      onAppSettings({ exists: snap.exists(), data: snap.exists() ? snap.data() : {}, fromCache: snap.metadata.fromCache });
     }, onError),
   ];
   return () => unsubs.forEach((u) => u());
@@ -71,6 +77,11 @@ export function deleteWithdrawal(uid, id) {
 /** Uloží nastavení plánu. */
 export function saveSettings(uid, settings) {
   return setDoc(settingsDoc(uid), { ...settings, updatedAt: serverTimestamp() });
+}
+
+/** Uloží (sloučí) nastavení aplikace: jazyk, státní svátky, průvodce. */
+export function saveAppSettings(uid, patch) {
+  return setDoc(appSettingsDoc(uid), { ...patch, updatedAt: serverTimestamp() }, { merge: true });
 }
 
 /** Data výjimky dne pro Firestore (poznámka max. 200 znaků, clearFixed jen platné hodnoty). */

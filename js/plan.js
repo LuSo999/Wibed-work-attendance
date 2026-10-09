@@ -11,15 +11,20 @@
 import {
   DAY_TYPES, isAbsenceType, breakMinutes, parseTime, toTimeString, parseDate, daysInMonth,
   toDateString, isWorkday, holidayName, weekday, monthFund, safeDayResult, hoursToMinutes,
-  formatMinutes, rulesForDate, bankBalance,
+  formatMinutes, rulesForDate, bankBalance, configureHolidays, holidaysEnabled,
 } from './calc.js';
 
 /** Krok rozložení deficitu. */
 export const PLAN_STEP_MIN = 15;
 
 const WORKDAYS = [1, 2, 3, 4, 5];
-export const WEEKDAY_NAMES = { 1: 'Pondělí', 2: 'Úterý', 3: 'Středa', 4: 'Čtvrtek', 5: 'Pátek' };
-export const CORE_WARNING = 'Porušuješ pevnou pracovní dobu.';
+
+/**
+ * Zprávy (chyby, varování, popisy změn) se vrací jako {key, params} – překládá je UI.
+ * Varování porušení pevné pracovní doby mají klíče z CORE_WARNING_KEYS.
+ */
+export const CORE_WARNING_KEYS = new Set(['plan.warn.arrivalAfterCore', 'plan.warn.leaveBeforeCore', 'plan.warn.core']);
+const msg = (key, params) => (params ? { key, params } : { key });
 
 /** Výchozí nastavení plánu (users/{uid}/settings/plan). */
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -44,8 +49,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
     even: Object.fromEntries([1, 2, 3, 4, 5].map((d) => [d, { arriveAt: '', leaveAt: '' }])),
   },
 });
-
-export const ANCHOR_LABELS = { arrival: 'Příchod', departure: 'Odchod' };
 
 const validTime = (v, fallback) => (parseTime(v) === null ? fallback : v);
 const validHours = (v, fallback) => (Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= 24 ? Number(v) : fallback);
@@ -163,17 +166,33 @@ export function isRuleChange(settings, patch) {
 export function ruleChangeImpact({ records, withdrawals = [], settings, next }) {
   const before = rulesFromSettings(normalizeSettings(settings));
   const after = rulesFromSettings(normalizeSettings(next));
-  let affectedDays = 0;
-  for (const r of records) {
-    const a = safeDayResult(r, before);
-    const b = safeDayResult(r, after);
-    if (a.complete && (a.credited !== b.credited || a.bankDelta !== b.bankDelta)) affectedDays++;
-  }
-  return {
-    balanceBefore: bankBalance(records, withdrawals, before),
-    balanceAfter: bankBalance(records, withdrawals, after),
-    affectedDays,
+  return historyImpact(records, withdrawals, { rules: before }, { rules: after });
+}
+
+/**
+ * Dopad zapnutí/vypnutí státních svátků na historii (svátky platí vždy zpětně).
+ * Konfiguraci svátků v calc.js dočasně přepne a vrátí do původního stavu.
+ */
+export function holidayChangeImpact({ records, withdrawals = [], settings, enabled }) {
+  const rules = rulesFromSettings(normalizeSettings(settings));
+  return historyImpact(records, withdrawals, { rules, holidays: holidaysEnabled() }, { rules, holidays: Boolean(enabled) });
+}
+
+/** Porovná výsledky uzavřených dnů a banky ve dvou konfiguracích {rules, holidays?}. */
+function historyImpact(records, withdrawals, before, after) {
+  const was = holidaysEnabled();
+  const run = ({ rules, holidays = was }) => {
+    configureHolidays({ enabled: holidays });
+    return { days: records.map((r) => safeDayResult(r, rules)), balance: bankBalance(records, withdrawals, rules) };
   };
+  try {
+    const a = run(before);
+    const b = run(after);
+    const affectedDays = a.days.filter((x, i) => x.complete && (x.credited !== b.days[i].credited || x.bankDelta !== b.days[i].bankDelta)).length;
+    return { balanceBefore: a.balance, balanceAfter: b.balance, affectedDays };
+  } finally {
+    configureHolidays({ enabled: was });
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -183,13 +202,13 @@ export function ruleChangeImpact({ records, withdrawals = [], settings, next }) 
 /** Varování pro odchod před koncem pevné pracovní doby. */
 export function leaveWarning(leaveAt, settings) {
   if (!leaveAt || parseTime(leaveAt) === null) return null;
-  return parseTime(leaveAt) < parseTime(settings.coreEnd) ? CORE_WARNING : null;
+  return parseTime(leaveAt) < parseTime(settings.coreEnd) ? msg('plan.warn.core') : null;
 }
 
 /** Varování pro příchod po začátku pevné pracovní doby. */
 export function arrivalWarning(arrival, settings) {
   if (!arrival || parseTime(arrival) === null) return null;
-  return parseTime(arrival) > parseTime(settings.coreStart) ? CORE_WARNING : null;
+  return parseTime(arrival) > parseTime(settings.coreStart) ? msg('plan.warn.core') : null;
 }
 
 /**
@@ -200,11 +219,11 @@ export function timeWarnings(arrival, leave, settings, { skipCore = false } = {}
   const list = [];
   const a = arrival === null ? null : toTimeString(arrival);
   const l = leave === null ? null : toTimeString(leave);
-  if (!skipCore && a && arrivalWarning(a, settings)) list.push(`Příchod ${a} je po začátku pevné pracovní doby (${settings.coreStart}). ${CORE_WARNING}`);
-  if (!skipCore && l && leaveWarning(l, settings)) list.push(`Odchod ${l} je před koncem pevné pracovní doby (${settings.coreEnd}). ${CORE_WARNING}`);
-  if (a && arrival < parseTime(settings.earliestArrival)) list.push(`Příchod ${a} je před nejdřívějším příchodem (${settings.earliestArrival}).`);
-  if (l && leave > parseTime(settings.latestDeparture)) list.push(`Odchod ${l} je po nejpozdějším odchodu (${settings.latestDeparture}).`);
-  if (a && l && leave <= arrival) list.push('Odchod musí být po příchodu.');
+  if (!skipCore && a && arrivalWarning(a, settings)) list.push(msg('plan.warn.arrivalAfterCore', { time: a, core: settings.coreStart }));
+  if (!skipCore && l && leaveWarning(l, settings)) list.push(msg('plan.warn.leaveBeforeCore', { time: l, core: settings.coreEnd }));
+  if (a && arrival < parseTime(settings.earliestArrival)) list.push(msg('plan.warn.beforeEarliest', { time: a, limit: settings.earliestArrival }));
+  if (l && leave > parseTime(settings.latestDeparture)) list.push(msg('plan.warn.afterLatest', { time: l, limit: settings.latestDeparture }));
+  if (a && l && leave <= arrival) list.push(msg('plan.warn.leaveNotAfterArrival'));
   return list;
 }
 
@@ -216,10 +235,10 @@ export function settingsWarnings(settings) {
   const anchorLv = settings.anchorMode === 'departure' ? anchor : null;
   for (const message of timeWarnings(anchorArr, anchorLv, settings)) list.push({ field: 'anchorTime', message });
   if (parseTime(settings.coreEnd) <= parseTime(settings.coreStart)) {
-    list.push({ field: 'coreEnd', message: 'Konec pevné pracovní doby musí být po jejím začátku.' });
+    list.push({ field: 'coreEnd', message: msg('plan.warn.coreOrder') });
   }
   if (parseTime(settings.latestDeparture) <= parseTime(settings.earliestArrival)) {
-    list.push({ field: 'latestDeparture', message: 'Nejpozdější odchod musí být po nejdřívějším příchodu.' });
+    list.push({ field: 'latestDeparture', message: msg('plan.warn.boundsOrder') });
   }
   for (const week of ['odd', 'even']) {
     for (const day of WORKDAYS) {
@@ -250,23 +269,20 @@ export function switchAnchorMode(settings, mode) {
   const onlyLeave = count((x) => x.leaveAt && !x.arriveAt);
   const onlyArrive = count((x) => x.arriveAt && !x.leaveAt);
   const both = count((x) => x.arriveAt && x.leaveAt);
+  const p = { time: next.anchorTime, old: s.anchorTime, stay: formatMinutes(stay) };
   const changes = [
-    `Pevný bude ${toDep ? 'odchod' : 'příchod'} v ${next.anchorTime} (běžný den ${formatMinutes(stay)} h pobytu, dosud ${toDep ? 'příchod' : 'odchod'} ${s.anchorTime}).`,
+    msg(toDep ? 'plan.switch.toDeparture' : 'plan.switch.toArrival', p),
     toDep
-      ? `Napracovávat se bude posunem příchodu dřív, nejdříve však v ${s.earliestArrival}.`
-      : `Napracovávat se bude posunem odchodu, nejpozději do ${s.latestDeparture}.`,
+      ? msg('plan.switch.shiftArrival', { limit: s.earliestArrival })
+      : msg('plan.switch.shiftLeave', { limit: s.latestDeparture }),
   ];
   if (onlyLeave) {
-    changes.push(toDep
-      ? `Dny jen s pevným odchodem (${onlyLeave}×): příchod už nebude ${s.anchorTime}, ale bude se dopočítávat – tyto dny začnou napracovávat.`
-      : `Dny jen s pevným odchodem (${onlyLeave}×): příchod bude v kotvě ${next.anchorTime} a den bude plně pevný.`);
+    changes.push(msg(toDep ? 'plan.switch.onlyLeaveToDep' : 'plan.switch.onlyLeaveToArr', { ...p, count: onlyLeave }));
   }
   if (onlyArrive) {
-    changes.push(toDep
-      ? `Dny jen s pevným příchodem (${onlyArrive}×): odchod bude v kotvě ${next.anchorTime} a den bude plně pevný.`
-      : `Dny jen s pevným příchodem (${onlyArrive}×): odchod už nebude ${s.anchorTime}, ale bude se dopočítávat.`);
+    changes.push(msg(toDep ? 'plan.switch.onlyArriveToDep' : 'plan.switch.onlyArriveToArr', { ...p, count: onlyArrive }));
   }
-  if (both) changes.push(`Dny s oběma pevnými časy (${both}×) se nemění.`);
+  if (both) changes.push(msg('plan.switch.both', { count: both }));
   return { settings: next, changes };
 }
 
@@ -290,8 +306,6 @@ export function weekParity(dateStr, parityFlip = false) {
   const odd = isoWeek(dateStr).week % 2 === 1;
   return odd !== Boolean(parityFlip) ? 'odd' : 'even';
 }
-
-export const PARITY_LABELS = { odd: 'lichý', even: 'sudý' };
 
 /** Pevné časy z rozvrhu pro datum: {arriveAt, leaveAt} ('' = nezadáno). */
 export function scheduledDay(dateStr, settings) {
@@ -420,24 +434,24 @@ export const NOTE_MAX = 200;
 export function validateOverride(ov, settings) {
   const s = normalizeSettings(settings);
   const warnings = [];
-  if ((ov.note ?? '').length > NOTE_MAX) return { error: `Poznámka může mít nejvýše ${NOTE_MAX} znaků.`, warnings };
-  if (ov.clearFixed != null && !CLEAR_VALUES.includes(ov.clearFixed)) return { error: 'Neplatná hodnota zrušení pevného času.', warnings };
+  if ((ov.note ?? '').length > NOTE_MAX) return { error: msg('plan.error.noteTooLong', { max: NOTE_MAX }), warnings };
+  if (ov.clearFixed != null && !CLEAR_VALUES.includes(ov.clearFixed)) return { error: msg('plan.error.clearFixed'), warnings };
   if (ov.absenceType && ov.absenceHours != null && ov.absenceHours !== '' && !(Number(ov.absenceHours) > 0)) {
-    return { error: 'Počet hodin nepřítomnosti musí být kladný.', warnings };
+    return { error: msg('error.absenceHoursPositive'), warnings };
   }
   if (ov.workedHours != null && ov.workedHours !== '' && !(Number(ov.workedHours) >= 0 && Number(ov.workedHours) <= 24)) {
-    return { error: 'Pevné hodiny musí být 0–24.', warnings };
+    return { error: msg('plan.error.workedHours'), warnings };
   }
-  for (const [field, label] of [['arriveAt', 'příchodu'], ['leaveAt', 'odchodu']]) {
-    if (ov[field] && parseTime(ov[field]) === null) return { error: `Neplatný čas ${label}.`, warnings };
+  for (const [field, key] of [['arriveAt', 'error.invalidArrival'], ['leaveAt', 'error.invalidDeparture']]) {
+    if (ov[field] && parseTime(ov[field]) === null) return { error: msg(key), warnings };
   }
   const { arr, lv } = dayEnds(ov.date, s, { override: ov });
   const fixedHours = ov.workedHours != null && ov.workedHours !== '';
   if (!fixedHours && arr !== null && lv !== null && lv <= arr) {
-    return { error: `Odchod (${toTimeString(lv)}) musí být po příchodu (${toTimeString(arr)}).`, warnings };
+    return { error: msg('plan.error.leaveBeforeArrival', { leave: toTimeString(lv), arrival: toTimeString(arr) }), warnings };
   }
-  warnings.push(...timeWarnings(ov.arriveAt ? arr : null, ov.leaveAt ? lv : null, s).filter((w) => !w.startsWith('Odchod musí')));
-  if (fixedHours && ov.arriveAt && ov.leaveAt) warnings.push('Jsou zadané pevné hodiny i oba časy – použijí se pevné hodiny.');
+  warnings.push(...timeWarnings(ov.arriveAt ? arr : null, ov.leaveAt ? lv : null, s).filter((w) => w.key !== 'plan.warn.leaveNotAfterArrival'));
+  if (fixedHours && ov.arriveAt && ov.leaveAt) warnings.push(msg('plan.warn.hoursAndTimes'));
   return { error: null, warnings };
 }
 
@@ -487,7 +501,7 @@ export function bulkClearFixed({ from, to, what, today, settings, overrides = []
  * @param {object} p.settings      nastavení uživatele
  * @param {Array}  p.records       záznamy docházky
  * @param {Array}  [p.overrides]   výjimky dnů {date, absenceType, absenceHours, arriveAt, leaveAt, workedHours}
- * @returns {{days: Array, summary: object, warnings: string[]}}
+ * @returns {{days: Array, summary: object, warnings: Array<{key, params}>}}
  *
  * Každý dnešní/budoucí pracovní den má příchod a odchod. Prázdný konec na straně
  * kotvy (anchorMode) se doplní kotvou, druhý se dopočítá. Den s oběma konci je pevný.
@@ -526,7 +540,7 @@ export function buildMonthPlan({ year, month, today, settings, records, override
       week,
       parity: weekParity(date, s.parityFlip),
       workday,
-      holiday: holidayName(date),
+      holiday: holidayName(date), // klíč svátku ve slovníku nebo null
       record: rec ?? null,
       override: ov,
       type: rec?.type ?? ov?.absenceType ?? (workday ? DAY_TYPES.WORK : null),
@@ -662,8 +676,8 @@ export function buildMonthPlan({ year, month, today, settings, records, override
     const l = x.plannedLeaveMin;
     x.arrival = a >= 0 && a <= 1439 ? toTimeString(a) : null;
     x.plannedLeave = l >= 0 && l <= 1439 ? toTimeString(l) : null;
-    if (a < 0) x.warnings.push('Plánovaný příchod by byl před půlnocí předchozího dne.');
-    if (l > 1439) x.warnings.push('Plánovaný odchod by byl po půlnoci.');
+    if (a < 0) x.warnings.push(msg('plan.warn.arrivalBeforeMidnight'));
+    if (l > 1439) x.warnings.push(msg('plan.warn.leaveAfterMidnight'));
     x.warnings.push(...timeWarnings(x.arrival ? a : null, x.plannedLeave ? l : null, s, { skipCore: x.absence > 0 }));
     x.credited = x.plannedWorked + x.absence;
   }
@@ -677,13 +691,16 @@ export function buildMonthPlan({ year, month, today, settings, records, override
   const warnings = [];
   const depMode = s.anchorMode === 'departure';
   if (unbalanced > 0) {
-    warnings.push(`Měsíc nelze vyrovnat: chybí ${formatMinutes(unbalanced)} h (běžné dny narážejí na max. ${formatMinutes(maxWorked)} h/den `
-      + `nebo na ${depMode ? `nejdřívější příchod ${s.earliestArrival}` : `nejpozdější odchod ${s.latestDeparture}`}; pevné dny se neprodlužují).`);
+    warnings.push(msg(depMode ? 'plan.warn.shortDep' : 'plan.warn.shortArr', {
+      hours: formatMinutes(unbalanced), max: formatMinutes(maxWorked), limit: depMode ? s.earliestArrival : s.latestDeparture,
+    }));
   } else if (unbalanced < 0) {
-    warnings.push(`Měsíc nelze vyrovnat: přebývá ${formatMinutes(-unbalanced)} h (běžné dny nelze zkrátit pod ${depMode ? `příchod v ${s.coreStart}` : `odchod v ${s.coreEnd}`}).`);
+    warnings.push(msg(depMode ? 'plan.warn.surplusDep' : 'plan.warn.surplusArr', {
+      hours: formatMinutes(-unbalanced), limit: depMode ? s.coreStart : s.coreEnd,
+    }));
   }
   const missing = days.filter((x) => x.kind === 'missing').length;
-  if (missing) warnings.push(`${missing} proběhlých pracovních dnů nemá záznam – započítávají se jako 0 h.`);
+  if (missing) warnings.push(msg('plan.warn.missingDays', { count: missing }));
 
   return {
     days,

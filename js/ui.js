@@ -1,4 +1,5 @@
 // Drobné pomocné funkce pro práci s DOM.
+import { t } from './i18n.js';
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -21,23 +22,8 @@ export function nowTime() {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-const longDate = new Intl.DateTimeFormat('cs-CZ', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
-const shortDate = new Intl.DateTimeFormat('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric', timeZone: 'UTC' });
-
-function utc(dateStr) {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d));
-}
-
-/** 'pondělí 3. března 2025' */
-export function formatDateLong(dateStr) {
-  return longDate.format(utc(dateStr));
-}
-
-/** '3. 3. 2025' */
-export function formatDateShort(dateStr) {
-  return shortDate.format(utc(dateStr));
-}
+// Formátování dat podle jazyka (Intl) – viz i18n.js.
+export { formatDateLong, formatDateShort } from './i18n.js';
 
 export function toast(message, kind = 'success') {
   const el = document.createElement('div');
@@ -55,7 +41,7 @@ export function toast(message, kind = 'success') {
 }
 
 /** Potvrzovací dialog → Promise<boolean>. Bez `danger` má potvrzovací tlačítko neutrální barvu. */
-export function confirmDialog(text, okLabel = 'Potvrdit', { danger = true } = {}) {
+export function confirmDialog(text, okLabel = t('common.confirm'), { danger = true } = {}) {
   const dlg = $('#dlg-confirm');
   $('#dlg-confirm-text').textContent = text;
   const ok = $('#dlg-confirm-ok');

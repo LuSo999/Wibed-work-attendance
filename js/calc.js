@@ -44,11 +44,14 @@ export function rulesForDate(rules, date) {
   return { ...RULES, ...values };
 }
 
-/** Popis pravidla přestávky pro uživatele, např. „Za každých celých 6:00 h pobytu se odečte 30 min přestávky.“ */
+/**
+ * Popis pravidla přestávky jako zpráva {key, params} (překládá UI),
+ * např. „Za každých celých 6:00 h pobytu se odečte 30 min přestávky.“
+ */
 export function describeBreakRule(rules) {
   const r = toRules(rules);
-  if (!r.BREAK_MIN) return 'Přestávka se neodečítá – odpracováno = celý pobyt.';
-  return `Za každých celých ${formatMinutes(r.BREAK_INTERVAL_MIN)} h pobytu se odečte ${r.BREAK_MIN} min přestávky.`;
+  if (!r.BREAK_MIN) return { key: 'break.none' };
+  return { key: 'break.rule', params: { interval: formatMinutes(r.BREAK_INTERVAL_MIN), minutes: r.BREAK_MIN } };
 }
 
 /** Typy dnů. */
@@ -61,23 +64,8 @@ export const DAY_TYPES = Object.freeze({
   COMP: 'comp',
 });
 
-export const DAY_TYPE_LABELS = Object.freeze({
-  work: 'Pracovní',
-  vacation: 'Dovolená',
-  sick: 'Nemoc',
-  doctor: 'Lékař',
-  comp: 'Náhradní volno',
-});
-
 /** Nepracovní typy, které se započítají do fondu, ale netvoří přesčas. */
 const CREDITED_TYPES = new Set([DAY_TYPES.VACATION, DAY_TYPES.SICK, DAY_TYPES.DOCTOR]);
-
-const WEEKDAY_LABELS = ['Ne', 'Po', 'Út', 'St', 'Čt', 'Pá', 'So'];
-
-export const MONTH_LABELS = [
-  'Leden', 'Únor', 'Březen', 'Duben', 'Květen', 'Červen',
-  'Červenec', 'Srpen', 'Září', 'Říjen', 'Listopad', 'Prosinec',
-];
 
 // ---------------------------------------------------------------------------
 // Čas a datum
@@ -113,9 +101,9 @@ export function formatMinutes(minutes, { sign = false } = {}) {
   return sign ? `+${text}` : text;
 }
 
-/** Minuty → desetinné hodiny jako text s čárkou ('8,50'). */
-export function formatHoursDecimal(minutes) {
-  return (minutes / 60).toFixed(2).replace('.', ',');
+/** Minuty → desetinné hodiny jako text se zvoleným oddělovačem ('8,50' / '8.50'). */
+export function formatHoursDecimal(minutes, separator = ',') {
+  return (minutes / 60).toFixed(2).replace('.', separator);
 }
 
 /** 'YYYY-MM-DD' → {y, m (1–12), d}; neplatný vstup → null. */
@@ -147,10 +135,6 @@ export function weekday(dateStr) {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
-export function weekdayLabel(dateStr) {
-  return WEEKDAY_LABELS[weekday(dateStr)];
-}
-
 /** Velikonoční neděle (gregoriánský kalendář, anonymní algoritmus). */
 export function easterSunday(y) {
   const a = y % 19;
@@ -176,35 +160,51 @@ function addDays(dateStr, delta) {
   return toDateString(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
 }
 
+/** Pevné státní svátky ČR: 'MM-DD' → klíč názvu ve slovníku. */
 const FIXED_HOLIDAYS = {
-  '01-01': 'Den obnovy samostatného českého státu, Nový rok',
-  '05-01': 'Svátek práce',
-  '05-08': 'Den vítězství',
-  '07-05': 'Den slovanských věrozvěstů Cyrila a Metoděje',
-  '07-06': 'Den upálení mistra Jana Husa',
-  '09-28': 'Den české státnosti',
-  '10-28': 'Den vzniku samostatného československého státu',
-  '11-17': 'Den boje za svobodu a demokracii',
-  '12-24': 'Štědrý den',
-  '12-25': '1. svátek vánoční',
-  '12-26': '2. svátek vánoční',
+  '01-01': 'holiday.newYear',
+  '05-01': 'holiday.labourDay',
+  '05-08': 'holiday.victoryDay',
+  '07-05': 'holiday.cyrilMethodius',
+  '07-06': 'holiday.janHus',
+  '09-28': 'holiday.statehood',
+  '10-28': 'holiday.independence',
+  '11-17': 'holiday.freedom',
+  '12-24': 'holiday.christmasEve',
+  '12-25': 'holiday.christmasDay',
+  '12-26': 'holiday.stStephen',
 };
 
-/** Státní svátky ČR pro rok: Map<'YYYY-MM-DD', název>. */
+/** Státní svátky ČR pro rok: Map<'YYYY-MM-DD', klíč názvu> (bez ohledu na nastavení). */
 export function czechHolidays(y) {
   const map = new Map();
-  for (const [md, name] of Object.entries(FIXED_HOLIDAYS)) map.set(`${y}-${md}`, name);
+  for (const [md, key] of Object.entries(FIXED_HOLIDAYS)) map.set(`${y}-${md}`, key);
   const easter = easterSunday(y);
   // Velký pátek je státním svátkem od roku 2016.
-  if (y >= 2016) map.set(addDays(easter, -2), 'Velký pátek');
-  map.set(addDays(easter, 1), 'Velikonoční pondělí');
+  if (y >= 2016) map.set(addDays(easter, -2), 'holiday.goodFriday');
+  map.set(addDays(easter, 1), 'holiday.easterMonday');
   return map;
 }
 
 const holidayCache = new Map();
 
-/** Název svátku pro datum, nebo null. */
+/**
+ * Konfigurace svátků na úrovni modulu (nastavení uživatele czHolidays).
+ * Vypnuté svátky = všechny výpočty se chovají, jako by svátky neexistovaly.
+ */
+const holidayConfig = { enabled: true };
+
+export function configureHolidays({ enabled = true } = {}) {
+  holidayConfig.enabled = Boolean(enabled);
+}
+
+export function holidaysEnabled() {
+  return holidayConfig.enabled;
+}
+
+/** Klíč názvu svátku pro datum (např. 'holiday.goodFriday'), nebo null (i při vypnutých svátcích). */
 export function holidayName(dateStr) {
+  if (!holidayConfig.enabled) return null;
   const y = Number(dateStr.slice(0, 4));
   if (!holidayCache.has(y)) holidayCache.set(y, czechHolidays(y));
   return holidayCache.get(y).get(dateStr) ?? null;
@@ -243,7 +243,7 @@ export function stayMinutes(arrival, departure) {
   const a = parseTime(arrival);
   const d = parseTime(departure);
   if (a === null || d === null) return null;
-  if (d < a) throw new RangeError('Odchod nemůže být dříve než příchod.');
+  if (d < a) throw new RangeError('error.departureBeforeArrival');
   return d - a;
 }
 
@@ -395,44 +395,44 @@ export function bankBalance(records, withdrawals = [], rules = undefined) {
 }
 
 /**
- * Kontrola výběru z banky. Vrací null, je-li vše v pořádku, jinak text chyby.
+ * Kontrola výběru z banky. Vrací null, je-li vše v pořádku, jinak chybu {key, params}.
  */
 export function validateWithdrawal(minutes, balance) {
-  if (!Number.isFinite(minutes) || minutes <= 0) return 'Zadejte kladný počet hodin.';
+  if (!Number.isFinite(minutes) || minutes <= 0) return { key: 'error.withdrawPositive' };
   if (minutes > balance) {
-    return `Nelze vybrat ${formatMinutes(minutes)} h – zůstatek banky je jen ${formatMinutes(balance)} h.`;
+    return { key: 'error.withdrawOverBalance', params: { amount: formatMinutes(minutes), balance: formatMinutes(balance) } };
   }
   return null;
 }
 
 /**
- * Kontrola záznamu dne před uložením. Vrací null nebo text chyby.
+ * Kontrola záznamu dne před uložením. Vrací null nebo chybu {key, params}.
  * @param {object} record     nový záznam
  * @param {number} balanceWithoutDay zůstatek banky bez vlivu tohoto dne
  * @param {object|number} [rules] pravidla uživatele (viz toRules)
  */
 export function validateDay(record, balanceWithoutDay = Infinity, rules = undefined) {
-  if (!parseDate(record.date)) return 'Neplatné datum.';
+  if (!parseDate(record.date)) return { key: 'error.invalidDate' };
   const type = record.type ?? DAY_TYPES.WORK;
-  if (!Object.values(DAY_TYPES).includes(type)) return 'Neznámý typ dne.';
+  if (!Object.values(DAY_TYPES).includes(type)) return { key: 'error.unknownType' };
   const fund = dayFund(record.date, rules);
   if (isAbsenceType(type) && record.absenceHours != null && record.absenceHours !== '') {
     const h = Number(record.absenceHours);
-    if (!Number.isFinite(h) || h <= 0) return 'Počet hodin nepřítomnosti musí být kladné číslo.';
+    if (!Number.isFinite(h) || h <= 0) return { key: 'error.absenceHoursPositive' };
   }
   const partial = partialAbsenceMinutes({ ...record, type }, fund);
   if (type === DAY_TYPES.WORK || partial !== null) {
-    if (record.arrival && parseTime(record.arrival) === null) return 'Neplatný čas příchodu.';
-    if (record.departure && parseTime(record.departure) === null) return 'Neplatný čas odchodu.';
-    if (record.departure && !record.arrival) return 'Nejdříve zadejte příchod.';
+    if (record.arrival && parseTime(record.arrival) === null) return { key: 'error.invalidArrival' };
+    if (record.departure && parseTime(record.departure) === null) return { key: 'error.invalidDeparture' };
+    if (record.departure && !record.arrival) return { key: 'error.arrivalFirst' };
     if (record.arrival && record.departure && parseTime(record.departure) < parseTime(record.arrival)) {
-      return 'Odchod nemůže být dříve než příchod.';
+      return { key: 'error.departureBeforeArrival' };
     }
   }
   if (type === DAY_TYPES.COMP) {
     const need = partial ?? fund;
     if (need > balanceWithoutDay) {
-      return `Na náhradní volno chybí v bance přesčasů ${formatMinutes(need - Math.max(0, balanceWithoutDay))} h.`;
+      return { key: 'error.compMissing', params: { missing: formatMinutes(need - Math.max(0, balanceWithoutDay)) } };
     }
   }
   return null;

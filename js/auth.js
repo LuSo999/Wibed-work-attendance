@@ -5,6 +5,7 @@ import {
   signInWithRedirect, getRedirectResult,
 } from 'https://www.gstatic.com/firebasejs/12.8.0/firebase-auth.js';
 import { auth } from './firebase.js';
+import { t } from './i18n.js';
 
 export function watchUser(callback) {
   return onAuthStateChanged(auth, callback);
@@ -45,25 +46,21 @@ export function logout() {
   return signOut(auth);
 }
 
-const MESSAGES = {
-  'auth/invalid-email': 'Neplatná e-mailová adresa.',
-  'auth/missing-password': 'Zadejte heslo.',
-  'auth/invalid-credential': 'Nesprávný e-mail nebo heslo.',
-  'auth/wrong-password': 'Nesprávný e-mail nebo heslo.',
-  'auth/user-not-found': 'Nesprávný e-mail nebo heslo.',
-  'auth/user-disabled': 'Účet je zablokovaný.',
-  'auth/email-already-in-use': 'Účet s tímto e-mailem už existuje.',
-  'auth/weak-password': 'Heslo je příliš slabé (alespoň 6 znaků).',
-  'auth/too-many-requests': 'Příliš mnoho pokusů. Zkuste to za chvíli.',
-  'auth/network-request-failed': 'Chyba sítě. Zkontrolujte připojení.',
-  'auth/popup-closed-by-user': 'Přihlašovací okno bylo zavřeno.',
-  'auth/cancelled-popup-request': 'Přihlášení bylo zrušeno.',
-  'auth/unauthorized-domain': 'Tato doména není povolena. Přidejte ji ve Firebase Console → Authentication → Settings → Authorized domains.',
-  'auth/operation-not-allowed': 'Tento způsob přihlášení není ve Firebase zapnutý.',
-  'auth/configuration-not-found': 'Authentication není ve Firebase projektu zapnuté.',
-  'auth/api-key-not-valid.-please-pass-a-valid-api-key.': 'Neplatný apiKey v js/firebase-config.js.',
-};
+/** Jazyk e-mailů a oken Firebase Auth podle jazyka aplikace. */
+export function setAuthLanguage(lang) {
+  auth.languageCode = lang;
+}
+
+/** Chybové kódy Firebase Auth se známým překladem (klíč 'auth.err.<kód bez auth/>'). */
+const KNOWN_ERRORS = new Set([
+  'invalid-email', 'missing-password', 'invalid-credential', 'wrong-password', 'user-not-found', 'user-disabled',
+  'email-already-in-use', 'weak-password', 'too-many-requests', 'network-request-failed', 'popup-closed-by-user',
+  'cancelled-popup-request', 'unauthorized-domain', 'operation-not-allowed', 'configuration-not-found',
+  'api-key-not-valid.-please-pass-a-valid-api-key.',
+]);
 
 export function authErrorMessage(err) {
-  return MESSAGES[err?.code] ?? `Přihlášení se nezdařilo (${err?.code ?? err?.message ?? err}).`;
+  const code = String(err?.code ?? '').replace(/^auth\//, '');
+  if (KNOWN_ERRORS.has(code)) return t(`auth.err.${code}`);
+  return t('auth.err.generic', { code: err?.code ?? err?.message ?? String(err) });
 }

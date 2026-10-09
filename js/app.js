@@ -2,18 +2,21 @@
 import { firebaseConfig } from './firebase-config.js';
 import { applyTheme, cycleTheme, getTheme } from './theme.js';
 import {
-  DAY_TYPES, DAY_TYPE_LABELS, MONTH_LABELS, dayResult, dayFund, holidayName, isWorkday,
-  isAbsenceType, weekdayLabel, daysInMonth, toDateString, monthSummary, bankBalance,
-  validateDay, validateWithdrawal, formatMinutes, parseTime,
+  DAY_TYPES, dayResult, dayFund, holidayName, isWorkday, isAbsenceType, daysInMonth, toDateString,
+  monthSummary, bankBalance, validateDay, validateWithdrawal, formatMinutes, parseTime, configureHolidays,
 } from './calc.js';
 import { buildMonthCsv, downloadCsv } from './csv.js';
-import { enhanceTimeInputs } from './time24.js';
+import { enhanceTimeInputs, refreshTimeInputs } from './time24.js';
 import {
-  normalizeSettings, rulesFromSettings, buildMonthPlan, fillRecord,
+  normalizeSettings, rulesFromSettings, buildMonthPlan, fillRecord, holidayChangeImpact,
 } from './plan.js';
 import {
-  initPlanView, renderPlanView, weekBadgeHtml, flipParity,
+  initPlanView, renderPlanView, weekBadgeHtml, flipParity, renderImpact,
 } from './plan-view.js';
+import {
+  t, tr, setLanguage, getLanguage, storedLanguage, onLanguageChange, applyTranslations, LANGUAGES,
+  formatMonthYear, weekdayShort,
+} from './i18n.js';
 import {
   $, $$, escapeHtml, todayStr, nowTime, formatDateLong, formatDateShort, toast,
   confirmDialog, setError,
@@ -23,11 +26,14 @@ import {
 // Stav
 // ---------------------------------------------------------------------------
 const now = new Date();
+const DEFAULT_APP = Object.freeze({ czHolidays: true, onboardingDone: false });
 const state = {
   user: null,
   records: new Map(), // 'YYYY-MM-DD' → záznam
   withdrawals: [],
   settings: normalizeSettings({}), // users/{uid}/settings/plan
+  app: { ...DEFAULT_APP }, // users/{uid}/settings/app
+  appLoaded: false, // dorazil stav settings/app ze serveru
   overrides: new Map(), // 'YYYY-MM-DD' → výjimka dne pro plán
   month: { y: now.getFullYear(), m: now.getMonth() + 1 },
   timeTouched: false,
@@ -59,6 +65,7 @@ const signed = (min) => formatMinutes(min, { sign: true });
 const toneClass = (min) => (min > 0
   ? 'text-emerald-600 dark:text-emerald-400'
   : min < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400');
+const typeLabel = (type) => t(`type.${type}`);
 
 const TYPE_BADGE = {
   work: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
@@ -67,8 +74,8 @@ const TYPE_BADGE = {
   doctor: 'bg-teal-100 text-teal-800 dark:bg-teal-900/50 dark:text-teal-300',
   comp: 'bg-violet-100 text-violet-800 dark:bg-violet-900/50 dark:text-violet-300',
 };
-const FILLED_CHIP = '<span class="inline-block rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800 dark:bg-teal-900/60 dark:text-teal-200">doplněno</span>';
-const badge = (type) => `<span class="inline-block rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_BADGE[type] ?? ''}">${escapeHtml(DAY_TYPE_LABELS[type] ?? type)}</span>`;
+const filledChip = () => `<span class="inline-block rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800 dark:bg-teal-900/60 dark:text-teal-200">${escapeHtml(t('tag.filled'))}</span>`;
+const badge = (type) => `<span class="inline-block rounded-full px-2 py-0.5 text-xs font-medium ${TYPE_BADGE[type] ?? ''}">${escapeHtml(TYPE_BADGE[type] ? typeLabel(type) : type)}</span>`;
 
 // ---------------------------------------------------------------------------
 // Obrazovky
@@ -83,8 +90,11 @@ function isConfigured(cfg) {
   );
 }
 
-function showSetup(detail) {
-  setError($('#setup-detail'), detail);
+let setupDetail = null; // zpráva {key, params} pro obrazovku s instrukcí
+
+function showSetup(detail = null) {
+  setupDetail = detail;
+  setError($('#setup-detail'), detail ? tr(detail) : null);
   showScreen('setup');
 }
 
@@ -92,13 +102,107 @@ function showSetup(detail) {
 // Téma
 // ---------------------------------------------------------------------------
 const THEME_ICONS = { system: '🖥️', light: '☀️', dark: '🌙' };
-const THEME_NAMES = { system: 'podle systému', light: 'světlý', dark: 'tmavý' };
 
 function renderThemeButton() {
-  const t = getTheme();
+  const theme = getTheme();
   const btn = $('#btn-theme');
-  btn.textContent = THEME_ICONS[t];
-  btn.title = `Motiv: ${THEME_NAMES[t]} (kliknutím přepnete)`;
+  btn.textContent = THEME_ICONS[theme];
+  btn.title = t('theme.title', { name: t(`theme.${theme}`) });
+  btn.setAttribute('aria-label', btn.title);
+}
+
+// ---------------------------------------------------------------------------
+// Jazyk
+// ---------------------------------------------------------------------------
+const README_URLS = {
+  cs: 'https://github.com/LuSo999/Wibed-work-attendance/blob/main/README.cs.md',
+  en: 'https://github.com/LuSo999/Wibed-work-attendance/blob/main/README.md',
+};
+
+/** Statické texty, odkazy a přepínače podle aktuálního jazyka. */
+function renderLanguage() {
+  const lang = getLanguage();
+  applyTranslations();
+  document.title = t('app.title');
+  for (const a of $$('[data-readme-link]')) a.href = README_URLS[lang];
+  const btn = $('#btn-lang');
+  const next = LANGUAGES[(LANGUAGES.indexOf(lang) + 1) % LANGUAGES.length];
+  btn.textContent = lang.toUpperCase();
+  btn.title = t('lang.switchTo', { name: t(`lang.${next}`) });
+  btn.setAttribute('aria-label', btn.title);
+  for (const b of $$('[data-set-lang]')) {
+    const active = b.dataset.setLang === lang;
+    b.classList.toggle('bg-indigo-600', active);
+    b.classList.toggle('text-white', active);
+    b.setAttribute('aria-pressed', String(active));
+  }
+  const sel = $('#form-plan-settings').language;
+  if (sel) sel.value = lang;
+  renderThemeButton();
+  renderAuthMode();
+  if (setupDetail) setError($('#setup-detail'), tr(setupDetail));
+  auth?.setAuthLanguage(lang);
+}
+
+/**
+ * Změna jazyka uživatelem (horní lišta, přihlášení, nastavení): uloží volbu
+ * a u přihlášeného uživatele se zapnutými svátky se zeptá, zda je vypnout.
+ */
+async function changeLanguage(lang) {
+  if (lang === getLanguage()) return;
+  setLanguage(lang);
+  if (!state.user) return;
+  store.saveAppSettings(state.user.uid, { language: lang })
+    .catch((e) => toast(t('toast.saveFailed', { error: e.message }), 'error'));
+  await askHolidays();
+}
+
+/** Po změně jazyka se překreslí vše bez reloadu. */
+onLanguageChange(() => {
+  renderLanguage();
+  refreshTimeInputs();
+  typeOptions($('#entry-type'));
+  typeOptions($('#form-day').type);
+  if (state.user) renderAll();
+});
+
+// ---------------------------------------------------------------------------
+// České státní svátky (settings/app.czHolidays)
+// ---------------------------------------------------------------------------
+function applyHolidays() {
+  configureHolidays({ enabled: state.app.czHolidays !== false });
+}
+
+/** Uloží stav svátků (dialog dopadu už proběhl). */
+function saveHolidays(enabled) {
+  state.app = { ...state.app, czHolidays: enabled };
+  applyHolidays();
+  renderAll();
+  store.saveAppSettings(state.user.uid, { czHolidays: enabled })
+    .catch((e) => toast(t('toast.saveFailed', { error: e.message }), 'error'));
+  toast(t(enabled ? 'holidays.onToast' : 'holidays.offToast'));
+}
+
+/**
+ * Dotaz „Vypnout české státní svátky?“ (Ponechat / Vypnout, předvybrán aktuální stav)
+ * s dopadem na banku. Přeskočí se, když by nic nenabízel (svátky už jsou vypnuté).
+ */
+function askHolidays() {
+  if (!state.user || state.app.czHolidays === false) return Promise.resolve();
+  const impact = holidayChangeImpact({
+    records: records(), withdrawals: state.withdrawals, settings: state.settings, enabled: false,
+  });
+  renderImpact($('#holidays-impact'), impact);
+  const dlg = $('#dlg-holidays');
+  dlg.returnValue = '';
+  dlg.showModal();
+  $('#holidays-keep').focus();
+  return new Promise((resolve) => {
+    dlg.addEventListener('close', () => {
+      if (dlg.returnValue === 'off') saveHolidays(false);
+      resolve();
+    }, { once: true });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +214,7 @@ const TABS = {
 
 function showTab(tab) {
   if (!TABS[tab]) tab = 'overview';
-  for (const t of Object.keys(TABS)) $(`#tab-${t}`).hidden = t !== tab;
+  for (const k of Object.keys(TABS)) $(`#tab-${k}`).hidden = k !== tab;
   for (const btn of $$('.tab-btn')) {
     const active = btn.dataset.tab === tab;
     btn.classList.toggle('text-indigo-600', active);
@@ -125,24 +229,26 @@ function showTab(tab) {
 
 function tabFromHash() {
   const key = location.hash.slice(1);
-  return Object.keys(TABS).find((t) => TABS[t] === key) ?? 'overview';
+  return Object.keys(TABS).find((k) => TABS[k] === key) ?? 'overview';
 }
 
 // ---------------------------------------------------------------------------
 // Přehled
 // ---------------------------------------------------------------------------
 function typeOptions(select) {
+  const value = select.value;
   select.innerHTML = Object.values(DAY_TYPES)
-    .map((t) => `<option value="${t}">${escapeHtml(DAY_TYPE_LABELS[t])}</option>`).join('');
+    .map((type) => `<option value="${type}">${escapeHtml(typeLabel(type))}</option>`).join('');
+  if (value) select.value = value;
 }
 
 function dayInfoText(date) {
   const parts = [formatDateLong(date)];
   const holiday = holidayName(date);
-  if (holiday) parts.push(`státní svátek – ${holiday}`);
-  else if (!isWorkday(date)) parts.push('víkend');
-  if (!isWorkday(date)) parts.push('fond 0 h, odpracovaná doba je celá přesčas');
-  if (isAbsenceType($('#entry-type').value)) parts.push('část dne nastavíte v „Upravit den podrobně“');
+  if (holiday) parts.push(t('entry.holiday', { name: t(holiday) }));
+  else if (!isWorkday(date)) parts.push(t('common.weekend'));
+  if (!isWorkday(date)) parts.push(t('entry.offDayFund'));
+  if (isAbsenceType($('#entry-type').value)) parts.push(t('entry.partialHint'));
   return parts.join(' · ');
 }
 
@@ -153,8 +259,8 @@ function renderBank() {
     el.textContent = `${signed(b)} h`;
     el.classList.toggle('text-rose-200', b < 0);
   }
-  const t = new Date();
-  const s = monthSummary(records(), t.getFullYear(), t.getMonth() + 1, state.withdrawals, rules());
+  const d = new Date();
+  const s = monthSummary(records(), d.getFullYear(), d.getMonth() + 1, state.withdrawals, rules());
   $('#bank-month').textContent = `${signed(s.overtime)} h`;
   $('#bank-fund').textContent = `${formatMinutes(s.fund)} h`;
 }
@@ -168,37 +274,38 @@ function renderEntry() {
   $('#entry-day-info').textContent = dayInfoText(date);
   $('#entry-work').hidden = !isWork;
   $('#entry-nonwork').hidden = isWork;
-  $('#btn-save-type').textContent = `Uložit den jako „${DAY_TYPE_LABELS[type]}“`;
+  $('#btn-save-type').textContent = t('entry.saveAs', { type: typeLabel(type) });
 
   const status = $('#entry-status');
   if (!record) {
-    status.innerHTML = '<p class="col-span-full text-slate-500 dark:text-slate-400">Pro tento den zatím není nic zapsáno.</p>';
+    status.innerHTML = `<p class="col-span-full text-slate-500 dark:text-slate-400">${escapeHtml(t('entry.nothing'))}</p>`;
     $('#btn-entry-edit').hidden = true;
     return;
   }
   $('#btn-entry-edit').hidden = false;
   const res = safeResult(record);
-  const filledChip = record.filled ? FILLED_CHIP : '';
+  const chip = record.filled ? filledChip() : '';
   if (record.type !== DAY_TYPES.WORK && !res?.partial) {
+    const bank = res?.bankDelta ? t('entry.fromBank', { hours: signed(res.bankDelta) }) : '';
     status.innerHTML = `
-      <div class="col-span-full flex items-center gap-2">${badge(record.type)}${filledChip}
-        <span class="text-slate-500 dark:text-slate-400">započteno ${formatMinutes(res?.credited ?? 0)} h${res?.bankDelta ? `, z banky ${signed(res.bankDelta)} h` : ''}</span>
+      <div class="col-span-full flex items-center gap-2">${badge(record.type)}${chip}
+        <span class="text-slate-500 dark:text-slate-400">${escapeHtml(t('entry.credited', { hours: formatMinutes(res?.credited ?? 0) }))}${escapeHtml(bank)}</span>
       </div>`;
     return;
   }
   const cell = (label, value, cls = '') => `
-    <div><p class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">${label}</p>
+    <div><p class="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">${escapeHtml(label)}</p>
     <p class="tabular text-lg font-semibold ${cls}">${value}</p></div>`;
   status.innerHTML = [
-    cell('Příchod', escapeHtml(record.arrival ?? '—')),
-    cell('Odchod', escapeHtml(record.departure ?? '—')),
-    cell('Odpracováno', res?.complete ? `${formatMinutes(res.worked)} h` : '—'),
-    cell('Přesčas', res?.complete ? `${signed(res.overtime)} h` : '—', res?.complete ? toneClass(res.overtime) : ''),
-  ].join('') + (res?.partial || filledChip
-    ? `<p class="col-span-full flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">${res?.partial ? `${badge(record.type)} ${formatMinutes(res.absence)} h započteno` : ''}${filledChip}</p>`
+    cell(t('field.arrival'), escapeHtml(record.arrival ?? '—')),
+    cell(t('field.departure'), escapeHtml(record.departure ?? '—')),
+    cell(t('entry.worked'), res?.complete ? `${formatMinutes(res.worked)} h` : '—'),
+    cell(t('entry.overtime'), res?.complete ? `${signed(res.overtime)} h` : '—', res?.complete ? toneClass(res.overtime) : ''),
+  ].join('') + (res?.partial || chip
+    ? `<p class="col-span-full flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">${res?.partial ? `${badge(record.type)} ${escapeHtml(t('entry.partialCredited', { hours: formatMinutes(res.absence) }))}` : ''}${chip}</p>`
     : '') + (res?.complete && res.break
-    ? `<p class="col-span-full text-xs text-slate-500 dark:text-slate-400">Pobyt ${formatMinutes(res.stay)} h, odečtena přestávka ${formatMinutes(res.break)} h.</p>`
-    : '') + (res === null ? '<p class="col-span-full text-xs text-red-600">Záznam je neplatný (odchod před příchodem) – opravte ho.</p>' : '');
+    ? `<p class="col-span-full text-xs text-slate-500 dark:text-slate-400">${escapeHtml(t('entry.stayBreak', { stay: formatMinutes(res.stay), break: formatMinutes(res.break) }))}</p>`
+    : '') + (res === null ? `<p class="col-span-full text-xs text-red-600">${escapeHtml(t('entry.invalid'))}</p>` : '');
 }
 
 /** Při změně data přepne výběr typu podle uloženého záznamu. */
@@ -212,11 +319,12 @@ function refreshTime() {
   if (!state.timeTouched) $('#entry-time').value = nowTime();
 }
 
+/** Uloží záznam dne; vrací null nebo přeloženou chybu. */
 function saveRecord(record) {
   const err = validateDay(record, balanceWithout(record.date), rules());
-  if (err) return err;
+  if (err) return tr(err);
   // Zápis se díky offline cache Firestore projeví okamžitě; chyba (např. pravidla) se ohlásí později.
-  store.saveDay(state.user.uid, record).catch((e) => toast(`Uložení se nezdařilo: ${e.message}`, 'error'));
+  store.saveDay(state.user.uid, record).catch((e) => toast(t('toast.saveFailed', { error: e.message }), 'error'));
   return null;
 }
 
@@ -224,7 +332,7 @@ async function onClock(kind) {
   const date = $('#entry-date').value;
   const time = $('#entry-time').value;
   const errEl = $('#entry-error');
-  if (!date || parseTime(time) === null) return setError(errEl, 'Zadejte platné datum a čas.');
+  if (!date || parseTime(time) === null) return setError(errEl, t('entry.invalidDateTime'));
 
   const existing = state.records.get(date);
   const partial = existing && safeResult(existing)?.partial;
@@ -233,18 +341,17 @@ async function onClock(kind) {
     : { date, type: DAY_TYPES.WORK, arrival: null, departure: null, note: existing?.note ?? '' };
 
   if (existing && existing.type !== DAY_TYPES.WORK && !partial
-    && !(await confirmDialog(`Den je zapsán jako „${DAY_TYPE_LABELS[existing.type]}“. Přepsat na pracovní den?`, 'Přepsat'))) return;
+    && !(await confirmDialog(t('entry.overwriteType', { type: typeLabel(existing.type) }), t('common.overwrite')))) return;
 
   const field = kind === 'arrival' ? 'arrival' : 'departure';
-  const label = kind === 'arrival' ? 'příchod' : 'odchod';
   if (base[field] && base[field] !== time
-    && !(await confirmDialog(`Přepsat ${label} ${base[field]} na ${time}?`, 'Přepsat'))) return;
+    && !(await confirmDialog(t(kind === 'arrival' ? 'entry.overwriteArrival' : 'entry.overwriteDeparture', { old: base[field], time }), t('common.overwrite')))) return;
 
   base[field] = time;
   const err = saveRecord(base);
   setError(errEl, err);
   if (err) return;
-  toast(`${kind === 'arrival' ? 'Příchod' : 'Odchod'} ${time} uložen`);
+  toast(t(kind === 'arrival' ? 'entry.arrivalSaved' : 'entry.departureSaved', { time }));
   state.timeTouched = false;
   refreshTime();
 }
@@ -254,10 +361,10 @@ async function onSaveType() {
   const type = $('#entry-type').value;
   const existing = state.records.get(date);
   if (existing?.type === DAY_TYPES.WORK && (existing.arrival || existing.departure)
-    && !(await confirmDialog('Den obsahuje příchod/odchod. Přepsat?', 'Přepsat'))) return;
+    && !(await confirmDialog(t('entry.overwriteTimes'), t('common.overwrite')))) return;
   const err = saveRecord({ date, type, note: existing?.note ?? '' });
   setError($('#entry-error'), err);
-  if (!err) toast(`Uloženo: ${DAY_TYPE_LABELS[type]}`);
+  if (!err) toast(t('entry.savedType', { type: typeLabel(type) }));
 }
 
 // ---------------------------------------------------------------------------
@@ -266,21 +373,21 @@ async function onSaveType() {
 function summaryCard(label, value, sub = '', cls = '') {
   return `
     <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-      <p class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">${label}</p>
+      <p class="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">${escapeHtml(label)}</p>
       <p class="tabular mt-1 text-xl font-bold ${cls}">${value}</p>
-      ${sub ? `<p class="text-xs text-slate-500 dark:text-slate-400">${sub}</p>` : ''}
+      ${sub ? `<p class="text-xs text-slate-500 dark:text-slate-400">${escapeHtml(sub)}</p>` : ''}
     </div>`;
 }
 
 function renderMonth() {
   const { y, m } = state.month;
-  $('#month-title').textContent = `${MONTH_LABELS[m - 1]} ${y}`;
+  $('#month-title').textContent = formatMonthYear(y, m);
   const s = monthSummary(records(), y, m, state.withdrawals, rules());
   $('#month-summary').innerHTML = [
-    summaryCard('Fond', `${formatMinutes(s.fund)} h`, `${s.workdays} pracovních dní`),
-    summaryCard('Odpracováno', `${formatMinutes(s.credited)} h`, `z toho práce ${formatMinutes(s.worked)} h`),
-    summaryCard('Přesčas', `${signed(s.overtime)} h`, 'za měsíc', toneClass(s.overtime)),
-    summaryCard('Čerpáno', `${formatMinutes(s.used)} h`, 'náhradní volno'),
+    summaryCard(t('month.fund'), `${formatMinutes(s.fund)} h`, t('month.workdays', { count: s.workdays })),
+    summaryCard(t('month.worked'), `${formatMinutes(s.credited)} h`, t('month.workedSub', { hours: formatMinutes(s.worked) })),
+    summaryCard(t('month.overtime'), `${signed(s.overtime)} h`, t('month.perMonth'), toneClass(s.overtime)),
+    summaryCard(t('month.used'), `${formatMinutes(s.used)} h`, t('type.comp')),
   ].join('');
   const pct = s.fund ? Math.min(100, Math.round((s.credited / s.fund) * 100)) : 0;
   $('#month-progress').style.width = `${pct}%`;
@@ -301,22 +408,22 @@ function renderMonth() {
       if (r.type === DAY_TYPES.WORK) middle = times;
       else if (res?.partial) middle = `${r.arrival ? `${times} ` : ''}${badge(r.type)} <span class="tabular text-xs">${formatMinutes(res.absence)} h</span>`;
       else middle = badge(r.type);
-      if (r.filled) middle += ` ${FILLED_CHIP}`;
+      if (r.filled) middle += ` ${filledChip()}`;
       if (res === null) {
-        right = '<span class="text-xs text-red-600">neplatné</span>';
+        right = `<span class="text-xs text-red-600">${escapeHtml(t('month.invalid'))}</span>`;
       } else if (res.complete) {
         right = `<span class="tabular font-semibold">${formatMinutes(res.credited)}</span>
           <span class="tabular block text-xs ${toneClass(res.bankDelta)}">${res.bankDelta ? signed(res.bankDelta) : '±0:00'}</span>`;
       } else {
-        right = '<span class="text-xs text-amber-600 dark:text-amber-400">probíhá</span>';
+        right = `<span class="text-xs text-amber-600 dark:text-amber-400">${escapeHtml(t('month.inProgress'))}</span>`;
       }
     }
-    const note = [holiday, r?.note].filter(Boolean).map(escapeHtml).join(' · ');
+    const note = [holiday ? t(holiday) : '', r?.note].filter(Boolean).map(escapeHtml).join(' · ');
     items.push(`
       <li>
         <button type="button" data-date="${date}" class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/60 ${off ? 'bg-slate-50/70 dark:bg-slate-950/40' : ''}">
           <span class="w-12 shrink-0 text-center ${date === today ? 'rounded-lg bg-indigo-600 py-1 text-white' : ''}">
-            <span class="block text-xs ${date === today ? '' : off ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400'}">${weekdayLabel(date)}</span>
+            <span class="block text-xs ${date === today ? '' : off ? 'text-rose-500' : 'text-slate-500 dark:text-slate-400'}">${escapeHtml(weekdayShort(date))}</span>
             <span class="tabular block font-bold">${d}.</span>
           </span>
           <span class="min-w-0 flex-1 text-sm">
@@ -341,8 +448,8 @@ function shiftMonth(delta) {
 
 function exportMonth() {
   const { y, m } = state.month;
-  const csv = buildMonthCsv(records(), state.withdrawals, y, m, rules());
-  downloadCsv(csv, `dochazka-${y}-${String(m).padStart(2, '0')}.csv`);
+  const csv = buildMonthCsv(records(), state.withdrawals, y, m, rules(), { lang: getLanguage() });
+  downloadCsv(csv, `${t('csv.filename')}-${y}-${String(m).padStart(2, '0')}.csv`);
 }
 
 // ---------------------------------------------------------------------------
@@ -373,17 +480,25 @@ function updateDialog() {
   $('#dlg-day-filled').hidden = !dialogFilled;
   $('#dlg-day-fill').hidden = !isWorkday(dialogDate) || dialogDate > todayStr();
   const err = validateDay(rec, balanceWithout(dialogDate), rules());
-  setError($('#dlg-day-error'), err);
+  setError($('#dlg-day-error'), err ? tr(err) : null);
   $('#dlg-day-save').disabled = Boolean(err);
   const res = err ? null : res0;
-  let text = `Fond dne ${formatMinutes(dayFund(dialogDate, rules()))} h`;
+  let text = t('day.fund', { hours: formatMinutes(dayFund(dialogDate, rules())) });
   if (res && (rec.type === DAY_TYPES.WORK || res.partial) && res.complete) {
-    text = `Pobyt ${formatMinutes(res.stay)} h − přestávka ${formatMinutes(res.break)} h = ${formatMinutes(res.worked)} h`
-      + `${res.partial ? ` + ${DAY_TYPE_LABELS[rec.type].toLowerCase()} ${formatMinutes(res.absence)} h` : ''} · přesčas ${signed(res.overtime)} h`;
+    text = t('day.calc', { stay: formatMinutes(res.stay), break: formatMinutes(res.break), worked: formatMinutes(res.worked) })
+      + (res.partial ? t('day.calcAbsence', { type: typeLabel(rec.type).toLowerCase(), hours: formatMinutes(res.absence) }) : '')
+      + t('day.calcOvertime', { hours: signed(res.overtime) });
   } else if (res && rec.type !== DAY_TYPES.WORK && !res.partial) {
-    text = `Započteno ${formatMinutes(res.credited)} h${res.bankDelta ? ` · z banky ${signed(res.bankDelta)} h` : ' · bez přesčasu'}`;
+    text = t('day.creditedOnly', { hours: formatMinutes(res.credited) })
+      + (res.bankDelta ? t('day.fromBank', { hours: signed(res.bankDelta) }) : t('day.noOvertime'));
   }
   $('#dlg-day-preview').textContent = text;
+}
+
+function dialogSubtitle(date) {
+  const holiday = holidayName(date);
+  if (holiday) return t(holiday);
+  return t(isWorkday(date) ? 'day.workday' : 'common.weekendDay');
 }
 
 function openDayDialog(date) {
@@ -397,7 +512,7 @@ function openDayDialog(date) {
   f.note.value = r?.note ?? '';
   dialogFilled = Boolean(r?.filled);
   $('#dlg-day-title').textContent = formatDateLong(date);
-  $('#dlg-day-sub').textContent = holidayName(date) ?? (isWorkday(date) ? 'Pracovní den' : 'Víkend');
+  $('#dlg-day-sub').textContent = dialogSubtitle(date);
   $('#dlg-day-delete').hidden = !r;
   updateDialog();
   $('#dlg-day').showModal();
@@ -408,7 +523,7 @@ function fillDialog() {
   const current = dialogRecord();
   const base = { ...current, departure: null };
   const rec = fillRecord(dialogDate, base, state.settings, state.overrides.get(dialogDate));
-  if (!rec) return setError($('#dlg-day-error'), 'Den nelze doplnit (odchod by vyšel po půlnoci).');
+  if (!rec) return setError($('#dlg-day-error'), t('fill.impossible'));
   const f = $('#form-day');
   f.type.value = rec.type;
   f.absenceHours.value = rec.absenceHours ?? '';
@@ -422,11 +537,11 @@ function fillDialog() {
 // Plán – karta „Dnes“ a odznak týdne
 // ---------------------------------------------------------------------------
 function todayPlanDay() {
-  const t = new Date();
+  const d = new Date();
   const plan = buildMonthPlan({
-    year: t.getFullYear(), month: t.getMonth() + 1, today: todayStr(), settings: state.settings, records: records(), overrides: [...state.overrides.values()],
+    year: d.getFullYear(), month: d.getMonth() + 1, today: todayStr(), settings: state.settings, records: records(), overrides: [...state.overrides.values()],
   });
-  return plan.days.find((d) => d.date === todayStr());
+  return plan.days.find((x) => x.date === todayStr());
 }
 
 function renderTodayPlan() {
@@ -441,28 +556,32 @@ function renderTodayPlan() {
   $('#today-plan-note').textContent = note ? `📝 ${note}` : '';
   $('#today-plan-note').hidden = !note;
   if (!d || (!d.workday && !d.record)) {
-    title.textContent = 'Dnes se podle plánu nepracuje';
-    sub.textContent = d?.holiday ?? 'víkend';
+    title.textContent = t('today.noWork');
+    sub.textContent = d?.holiday ? t(d.holiday) : t('common.weekend');
   } else if (d.plannedWorked === null) {
-    title.textContent = `Dnes hotovo: ${formatMinutes(d.credited)} h`;
-    sub.textContent = d.record?.departure ? `odchod ${d.record.departure}` : DAY_TYPE_LABELS[d.type] ?? '';
+    title.textContent = t('today.done', { hours: formatMinutes(d.credited) });
+    sub.textContent = d.record?.departure ? t('today.leftAt', { time: d.record.departure }) : (d.type ? typeLabel(d.type) : '');
   } else if (d.kind === 'absence') {
-    title.textContent = `Dnes: ${DAY_TYPE_LABELS[d.type]}`;
-    sub.textContent = 'celý den';
+    title.textContent = t('today.absence', { type: typeLabel(d.type) });
+    sub.textContent = t('common.wholeDay');
   } else if (d.plannedLeave && d.arrival) {
-    const how = d.kind === 'fixed' ? 'pevný den' : d.kind === 'override' ? 'výjimka' : 'dopočteno do fondu';
+    const how = t(d.kind === 'fixed' ? 'today.howFixed' : d.kind === 'override' ? 'today.howOverride' : 'today.howRegular');
     // před příchodem nabídne plánovaný příchod, po něm plánovaný odchod
     const next = d.actualArrival ? 'departure' : 'arrival';
     title.textContent = next === 'arrival'
-      ? `Dnes: příchod v ${d.arrival}, odchod v ${d.plannedLeave}`
-      : `Dnes: plánovaný odchod v ${d.plannedLeave}`;
-    sub.textContent = `${formatMinutes(d.plannedWorked)} h práce${d.actualArrival ? ` · příchod ${d.arrival}` : ''} · ${how}`;
+      ? t('today.planBoth', { arrival: d.arrival, leave: d.plannedLeave })
+      : t('today.planLeave', { leave: d.plannedLeave });
+    sub.textContent = [
+      t('today.hoursWork', { hours: formatMinutes(d.plannedWorked) }),
+      d.actualArrival ? t('today.arrivedAt', { time: d.arrival }) : '',
+      how,
+    ].filter(Boolean).join(' · ');
     btn.hidden = false;
     btn.dataset.time = next === 'arrival' ? d.arrival : d.plannedLeave;
     btn.dataset.next = next;
   } else {
-    title.textContent = 'Dnes nelze naplánovat odchod';
-    sub.textContent = d.warnings[0] ?? '';
+    title.textContent = t('today.cannotPlan');
+    sub.textContent = tr(d.warnings[0]);
   }
 }
 
@@ -474,7 +593,7 @@ function usePlan() {
   $('#entry-time').value = time;
   state.timeTouched = true;
   renderEntry();
-  toast(`Čas nastaven na ${time} – potvrďte tlačítkem ${next === 'arrival' ? 'Příchod' : 'Odchod'}`);
+  toast(t('today.timeSet', { time, button: t(next === 'arrival' ? 'entry.arrival' : 'entry.departure') }));
 }
 
 // ---------------------------------------------------------------------------
@@ -489,9 +608,9 @@ function updateWithdrawForm() {
   const f = $('#form-withdraw');
   const minutes = withdrawMinutes();
   const err = f.hours.value === '' ? null : validateWithdrawal(minutes, balance());
-  setError($('#withdraw-error'), err);
+  setError($('#withdraw-error'), err ? tr(err) : null);
   $('#btn-withdraw').disabled = Boolean(err) || f.hours.value === '' || !f.date.value || balance() <= 0;
-  if (balance() <= 0 && !err) setError($('#withdraw-error'), 'Banka přesčasů je prázdná – není co vybrat.');
+  if (balance() <= 0 && !err) setError($('#withdraw-error'), t('bank.empty'));
 }
 
 function renderBankHistory() {
@@ -510,10 +629,10 @@ function renderBankHistory() {
       </div>
       <span class="tabular font-semibold text-rose-600 dark:text-rose-400">−${formatMinutes(it.minutes)} h</span>
       ${it.comp
-    ? `<button type="button" data-edit-date="${it.date}" class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" title="Upravit den">✎</button>`
-    : `<button type="button" data-delete-id="${escapeHtml(it.id)}" class="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40" title="Smazat výběr">✕</button>`}
+    ? `<button type="button" data-edit-date="${it.date}" class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800" title="${escapeHtml(t('bank.editDay'))}">✎</button>`
+    : `<button type="button" data-delete-id="${escapeHtml(it.id)}" class="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40" title="${escapeHtml(t('bank.deleteWithdrawal'))}">✕</button>`}
     </li>`).join('')
-    : '<li class="px-5 py-6 text-center text-sm text-slate-500 dark:text-slate-400">Zatím žádné čerpání.</li>';
+    : `<li class="px-5 py-6 text-center text-sm text-slate-500 dark:text-slate-400">${escapeHtml(t('bank.noHistory'))}</li>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -535,6 +654,11 @@ function renderAll() {
 // ---------------------------------------------------------------------------
 let registerMode = false;
 
+function renderAuthMode() {
+  $('#btn-auth-submit').textContent = t(registerMode ? 'auth.register' : 'auth.login');
+  $('#btn-auth-toggle').textContent = t(registerMode ? 'auth.haveAccount' : 'auth.register');
+}
+
 function setupAuthScreen() {
   const form = $('#form-auth');
   const errEl = $('#auth-error');
@@ -543,8 +667,7 @@ function setupAuthScreen() {
 
   const setMode = (reg) => {
     registerMode = reg;
-    submit.textContent = reg ? 'Vytvořit účet' : 'Přihlásit se';
-    $('#btn-auth-toggle').textContent = reg ? 'Už mám účet' : 'Vytvořit účet';
+    renderAuthMode();
     form.password.autocomplete = reg ? 'new-password' : 'current-password';
     setError(errEl, null);
   };
@@ -571,10 +694,10 @@ function setupAuthScreen() {
     setError(errEl, null);
     setError(infoEl, null);
     const email = form.email.value.trim();
-    if (!email) return setError(errEl, 'Vyplňte e-mail, na který pošleme odkaz pro obnovu hesla.');
+    if (!email) return setError(errEl, t('auth.resetNeedEmail'));
     try {
       await auth.resetPassword(email);
-      setError(infoEl, 'Pokud účet existuje, poslali jsme na e-mail odkaz pro obnovu hesla.');
+      setError(infoEl, t('auth.resetSent'));
     } catch (err) {
       setError(errEl, auth.authErrorMessage(err));
     }
@@ -592,6 +715,25 @@ function setupAuthScreen() {
   auth.checkRedirectResult().catch((err) => setError(errEl, auth.authErrorMessage(err)));
 }
 
+/** Stav settings/app ze snapshotu: jazyk, svátky a jednorázový dotaz po prvním přihlášení. */
+function onAppSettings({ exists, data, fromCache }) {
+  const prevHolidays = state.app.czHolidays;
+  state.app = { ...DEFAULT_APP, ...data, czHolidays: data.czHolidays !== false };
+  if (exists && LANGUAGES.includes(data.language) && data.language !== getLanguage()) setLanguage(data.language);
+  applyHolidays();
+  if (prevHolidays !== state.app.czHolidays || !state.appLoaded) renderAll();
+  if (fromCache || state.appLoaded) return;
+  state.appLoaded = true;
+  if (!exists) {
+    // První přihlášení bez settings/app: uloží jazyk z prohlížeče a jednorázově
+    // se zeptá na svátky, pokud uživatel nepoužívá češtinu.
+    const lang = getLanguage();
+    store.saveAppSettings(state.user.uid, { language: lang, czHolidays: true })
+      .catch((e) => toast(t('toast.saveFailed', { error: e.message }), 'error'));
+    if (lang !== 'cs') askHolidays();
+  }
+}
+
 function onUser(user) {
   state.unsubscribe?.();
   state.unsubscribe = null;
@@ -600,6 +742,9 @@ function onUser(user) {
   state.withdrawals = [];
   state.settings = normalizeSettings({});
   state.overrides = new Map();
+  state.app = { ...DEFAULT_APP };
+  state.appLoaded = false;
+  applyHolidays();
 
   if (!user) {
     $('#form-auth').reset();
@@ -632,10 +777,9 @@ function onUser(user) {
       state.overrides = new Map(list.map((o) => [o.date, o]));
       renderAll();
     },
+    onAppSettings,
     onError(err) {
-      toast(err.code === 'permission-denied'
-        ? 'Přístup k datům odepřen – zkontrolujte nasazení firestore.rules.'
-        : `Chyba databáze: ${err.message}`, 'error');
+      toast(err.code === 'permission-denied' ? t('toast.permissionDenied') : t('toast.dbError', { error: err.message }), 'error');
     },
   });
 
@@ -651,6 +795,17 @@ function onUser(user) {
 // ---------------------------------------------------------------------------
 // Události
 // ---------------------------------------------------------------------------
+function bindLanguageEvents() {
+  $('#btn-lang').addEventListener('click', () => {
+    const lang = getLanguage();
+    changeLanguage(LANGUAGES[(LANGUAGES.indexOf(lang) + 1) % LANGUAGES.length]);
+  });
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-set-lang]');
+    if (btn) changeLanguage(btn.dataset.setLang);
+  });
+}
+
 function bindAppEvents() {
   for (const btn of $$('.tab-btn')) {
     btn.addEventListener('click', () => {
@@ -693,8 +848,8 @@ function bindAppEvents() {
   $('#btn-month-prev').addEventListener('click', () => shiftMonth(-1));
   $('#btn-month-next').addEventListener('click', () => shiftMonth(1));
   $('#btn-month-today').addEventListener('click', () => {
-    const t = new Date();
-    state.month = { y: t.getFullYear(), m: t.getMonth() + 1 };
+    const d = new Date();
+    state.month = { y: d.getFullYear(), m: d.getMonth() + 1 };
     renderMonth();
   });
   $('#btn-export').addEventListener('click', exportMonth);
@@ -719,14 +874,14 @@ function bindAppEvents() {
       setError($('#dlg-day-error'), err);
       return;
     }
-    toast('Den uložen');
+    toast(t('day.saved'));
   });
   $('#dlg-day-delete').addEventListener('click', async () => {
     const date = dialogDate;
     $('#dlg-day').close();
-    if (!(await confirmDialog(`Smazat záznam pro ${formatDateShort(date)}?`, 'Smazat'))) return;
-    store.deleteDay(state.user.uid, date).catch((err) => toast(`Smazání se nezdařilo: ${err.message}`, 'error'));
-    toast('Záznam smazán');
+    if (!(await confirmDialog(t('day.confirmDelete', { date: formatDateShort(date) }), t('common.delete')))) return;
+    store.deleteDay(state.user.uid, date).catch((err) => toast(t('toast.deleteFailed', { error: err.message }), 'error'));
+    toast(t('day.deleted'));
   });
 
   // Banka
@@ -735,11 +890,11 @@ function bindAppEvents() {
   wf.addEventListener('submit', (e) => {
     e.preventDefault();
     const minutes = withdrawMinutes();
-    const err = !wf.date.value ? 'Zadejte datum.' : validateWithdrawal(minutes, balance());
-    if (err) return setError($('#withdraw-error'), err);
+    const err = !wf.date.value ? { key: 'error.dateRequired' } : validateWithdrawal(minutes, balance());
+    if (err) return setError($('#withdraw-error'), tr(err));
     store.addWithdrawal(state.user.uid, { date: wf.date.value, minutes, note: wf.note.value })
-      .catch((er) => toast(`Uložení se nezdařilo: ${er.message}`, 'error'));
-    toast(`Vybráno ${formatMinutes(minutes)} h z banky`);
+      .catch((er) => toast(t('toast.saveFailed', { error: er.message }), 'error'));
+    toast(t('bank.withdrawn', { hours: formatMinutes(minutes) }));
     wf.hours.value = '';
     wf.note.value = '';
     updateWithdrawForm();
@@ -749,10 +904,10 @@ function bindAppEvents() {
     const edit = e.target.closest('[data-edit-date]');
     if (edit) openDayDialog(edit.dataset.editDate);
     if (!del) return;
-    if (!(await confirmDialog('Smazat tento výběr? Hodiny se vrátí do banky.', 'Smazat'))) return;
+    if (!(await confirmDialog(t('bank.confirmDelete'), t('common.delete')))) return;
     store.deleteWithdrawal(state.user.uid, del.dataset.deleteId)
-      .catch((err) => toast(`Smazání se nezdařilo: ${err.message}`, 'error'));
-    toast('Výběr smazán');
+      .catch((err) => toast(t('toast.deleteFailed', { error: err.message }), 'error'));
+    toast(t('bank.deleted'));
   });
 
   // Offline indikátor
@@ -772,9 +927,12 @@ function registerServiceWorker() {
 }
 
 async function main() {
+  // Výchozí jazyk je čeština; jinak poslední volba uložená v prohlížeči.
+  setLanguage(storedLanguage(), { persist: false });
   applyTheme();
-  renderThemeButton();
   enhanceTimeInputs();
+  renderLanguage();
+  bindLanguageEvents();
   $('#btn-theme').addEventListener('click', () => { cycleTheme(); renderThemeButton(); });
   registerServiceWorker();
 
@@ -784,25 +942,28 @@ async function main() {
     [auth, store] = await Promise.all([import('./auth.js'), import('./store.js')]);
   } catch (err) {
     console.error(err);
-    return showSetup(`Firebase se nepodařilo inicializovat: ${err.message}. Zkontrolujte hodnoty v js/firebase-config.js a připojení k internetu.`);
+    return showSetup({ key: 'setup.initFailed', params: { error: err.message } });
   }
+  auth.setAuthLanguage(getLanguage());
 
   setupAuthScreen();
   bindAppEvents();
   initPlanView({
     getState: () => ({
-      settings: state.settings, records: records(), overrides: [...state.overrides.values()], withdrawals: state.withdrawals,
+      settings: state.settings, records: records(), overrides: [...state.overrides.values()], withdrawals: state.withdrawals, app: state.app,
     }),
     saveRecord,
     openDayDialog,
+    changeLanguage,
+    saveHolidays,
     saveSettings: (s) => store.saveSettings(state.user.uid, s)
-      .catch((e) => toast(`Uložení nastavení se nezdařilo: ${e.message}`, 'error')),
+      .catch((e) => toast(t('toast.settingsFailed', { error: e.message }), 'error')),
     saveOverride: (o) => store.saveOverride(state.user.uid, o)
-      .catch((e) => toast(`Uložení výjimky se nezdařilo: ${e.message}`, 'error')),
+      .catch((e) => toast(t('toast.overrideFailed', { error: e.message }), 'error')),
     deleteOverride: (date) => store.deleteOverride(state.user.uid, date)
-      .catch((e) => toast(`Smazání výjimky se nezdařilo: ${e.message}`, 'error')),
+      .catch((e) => toast(t('toast.overrideDeleteFailed', { error: e.message }), 'error')),
     applyOverrides: (ops) => store.applyOverrides(state.user.uid, ops)
-      .catch((e) => toast(`Uložení výjimek se nezdařilo: ${e.message}`, 'error')),
+      .catch((e) => toast(t('toast.overridesFailed', { error: e.message }), 'error')),
   });
   auth.watchUser(onUser);
 }

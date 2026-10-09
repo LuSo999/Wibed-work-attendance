@@ -1,13 +1,17 @@
 /**
  * Export měsíce do CSV pro Excel: UTF-8 s BOM, oddělovač středník, konce řádků CRLF.
+ * Hlavičky, typy dnů a desetinný oddělovač podle jazyka (cs čárka, en tečka).
  * buildMonthCsv je čistá funkce (testovatelná v Node), downloadCsv pracuje s DOM.
+ * Texty bere výhradně ze slovníků (js/i18n/*.js).
  */
 import {
-  DAY_TYPE_LABELS, MONTH_LABELS, daysInMonth, toDateString, weekdayLabel, holidayName,
-  dayResult, monthSummary, formatMinutes, formatHoursDecimal,
+  daysInMonth, toDateString, holidayName, dayResult, monthSummary, formatMinutes, formatHoursDecimal,
 } from './calc.js';
+import {
+  translator, weekdayShort, formatMonthYear, decimalSeparator, DEFAULT_LANGUAGE,
+} from './i18n.js';
 
-const BOM = '﻿';
+const BOM = '\uFEFF';
 const SEP = ';';
 
 function cell(value) {
@@ -19,14 +23,22 @@ function row(values) {
   return values.map(cell).join(SEP);
 }
 
-/** Text CSV (včetně BOM) pro zvolený měsíc. */
-export function buildMonthCsv(records, withdrawals, y, m, rules = undefined) {
+/** Datum v CSV: cs 'DD.MM.YYYY', en 'YYYY-MM-DD' (ISO, Excel ho rozpozná). */
+const csvDate = (date, lang) => (lang === 'cs' ? date.split('-').reverse().join('.') : date);
+
+/**
+ * Text CSV (včetně BOM) pro zvolený měsíc.
+ * @param {object} [options] { lang: 'cs' | 'en' } – jazyk hlaviček a formát čísel (výchozí čeština)
+ */
+export function buildMonthCsv(records, withdrawals, y, m, rules = undefined, { lang = DEFAULT_LANGUAGE } = {}) {
+  const t = translator(lang);
+  const dec = decimalSeparator(lang);
   const byDate = new Map(records.map((r) => [r.date, r]));
   const lines = [];
   lines.push(row([
-    'Datum', 'Den', 'Typ', 'Příchod', 'Odchod', 'Pobyt', 'Přestávka',
-    'Odpracováno', 'Přesčas', 'Přesčas (h)', 'Poznámka',
-  ]));
+    'csv.date', 'csv.day', 'csv.type', 'csv.arrival', 'csv.departure', 'csv.stay', 'csv.break',
+    'csv.worked', 'csv.overtime', 'csv.overtimeHours', 'csv.note',
+  ].map((k) => t(k))));
 
   for (let d = 1; d <= daysInMonth(y, m); d++) {
     const date = toDateString(y, m, d);
@@ -39,19 +51,20 @@ export function buildMonthCsv(records, withdrawals, y, m, rules = undefined) {
       res = null;
     }
     const holiday = holidayName(date);
-    const absenceNote = res?.partial ? `${DAY_TYPE_LABELS[r.type]} ${formatMinutes(res.absence)} h` : '';
-    const note = [r.filled ? 'doplněno' : '', absenceNote, r.note, holiday].filter(Boolean).join(' | ');
+    const typeLabel = t(`type.${r.type}`);
+    const absenceNote = res?.partial ? `${typeLabel} ${formatMinutes(res.absence)} h` : '';
+    const note = [r.filled ? t('tag.filled') : '', absenceNote, r.note, holiday ? t(holiday) : ''].filter(Boolean).join(' | ');
     lines.push(row([
-      date.split('-').reverse().join('.'),
-      weekdayLabel(date),
-      DAY_TYPE_LABELS[r.type] ?? r.type,
+      csvDate(date, lang),
+      weekdayShort(date, lang),
+      typeLabel,
       r.arrival ?? '',
       r.departure ?? '',
       res?.stay != null ? formatMinutes(res.stay) : '',
       res?.stay != null ? formatMinutes(res.break) : '',
       res ? formatMinutes(res.credited) : '',
       res ? formatMinutes(res.bankDelta) : '',
-      res ? formatHoursDecimal(res.bankDelta) : '',
+      res ? formatHoursDecimal(res.bankDelta, dec) : '',
       note,
     ]));
   }
@@ -60,21 +73,21 @@ export function buildMonthCsv(records, withdrawals, y, m, rules = undefined) {
   const monthWithdrawals = withdrawals.filter((w) => w.date?.startsWith(monthPrefix));
   if (monthWithdrawals.length) {
     lines.push('');
-    lines.push(row(['Výběry z banky přesčasů']));
-    lines.push(row(['Datum', 'Hodiny', 'Poznámka']));
+    lines.push(row([t('csv.withdrawals')]));
+    lines.push(row([t('csv.date'), t('csv.hours'), t('csv.note')]));
     for (const w of [...monthWithdrawals].sort((a, b) => a.date.localeCompare(b.date))) {
-      lines.push(row([w.date.split('-').reverse().join('.'), formatMinutes(w.minutes), w.note ?? '']));
+      lines.push(row([csvDate(w.date, lang), formatMinutes(w.minutes), w.note ?? '']));
     }
   }
 
   const s = monthSummary(records, y, m, withdrawals, rules);
   lines.push('');
-  lines.push(row([`Souhrn ${MONTH_LABELS[m - 1]} ${y}`]));
-  lines.push(row(['Pracovní dny', s.workdays]));
-  lines.push(row(['Fond', formatMinutes(s.fund)]));
-  lines.push(row(['Odpracováno (vč. započtených dnů)', formatMinutes(s.credited)]));
-  lines.push(row(['Přesčas za měsíc', formatMinutes(s.overtime)]));
-  lines.push(row(['Čerpáno z banky', formatMinutes(s.used)]));
+  lines.push(row([t('csv.summary', { month: formatMonthYear(y, m, lang) })]));
+  lines.push(row([t('csv.workdays'), s.workdays]));
+  lines.push(row([t('csv.fund'), formatMinutes(s.fund)]));
+  lines.push(row([t('csv.credited'), formatMinutes(s.credited)]));
+  lines.push(row([t('csv.monthOvertime'), formatMinutes(s.overtime)]));
+  lines.push(row([t('csv.used'), formatMinutes(s.used)]));
 
   return BOM + lines.join('\r\n') + '\r\n';
 }

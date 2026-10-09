@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Docházka</title>
-  <meta name="description" content="Evidence pracovní docházky a banky přesčasů.">
+  <meta name="description" content="Evidence pracovní docházky a banky přesčasů." data-i18n-attr="content:app.description">
   <meta name="theme-color" content="#4f46e5">
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
@@ -50,7 +50,7 @@
   <section id="screen-loading" class="flex min-h-screen items-center justify-center">
     <div class="flex flex-col items-center gap-3 text-slate-500 dark:text-slate-400">
       <div class="h-10 w-10 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600"></div>
-      <p>Načítání…</p>
+      <p data-i18n="common.loading"></p>
     </div>
   </section>
 
@@ -58,18 +58,18 @@
   <section id="screen-setup" class="mx-auto max-w-xl px-4 py-10" hidden>
     <div class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
       <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-amber-100 text-2xl dark:bg-amber-900/40">⚙️</div>
-      <h1 class="text-xl font-bold">Chybí konfigurace Firebase</h1>
+      <h1 class="text-xl font-bold" data-i18n="setup.title"></h1>
       <p class="mt-2 text-slate-600 dark:text-slate-400">
-        Aplikace potřebuje připojení k vašemu Firebase projektu. Doplňte údaje do souboru
+        <span data-i18n="setup.intro"></span>
         <code class="rounded bg-slate-100 px-1.5 py-0.5 text-sm dark:bg-slate-800">js/firebase-config.js</code>.
       </p>
       <ol class="mt-4 list-decimal space-y-2 pl-5 text-sm text-slate-700 dark:text-slate-300">
-        <li>Otevřete <a class="text-indigo-600 underline dark:text-indigo-400" href="https://console.firebase.google.com/" target="_blank" rel="noopener">Firebase Console</a> a vyberte projekt.</li>
-        <li><b>⚙ Project settings → General → Your apps</b> – přidejte Web app (&lt;/&gt;), pokud ještě není.</li>
-        <li>V části <b>SDK setup and configuration</b> zvolte <b>Config</b> a zkopírujte hodnoty.</li>
-        <li>Nahraďte jimi placeholdery <code>YOUR_…</code> v <code>js/firebase-config.js</code>, commitněte a obnovte stránku.</li>
+        <li><span data-i18n="setup.step1"></span> <a class="text-indigo-600 underline dark:text-indigo-400" href="https://console.firebase.google.com/" target="_blank" rel="noopener">Firebase Console</a></li>
+        <li><b>⚙ Project settings → General → Your apps</b> – <span data-i18n="setup.step2"></span></li>
+        <li><b>SDK setup and configuration</b> → <b>Config</b>: <span data-i18n="setup.step3"></span></li>
+        <li><code>YOUR_…</code> → <code>js/firebase-config.js</code>: <span data-i18n="setup.step4"></span></li>
       </ol>
-      <p class="mt-4 text-sm text-slate-500 dark:text-slate-400">Kompletní postup (Authentication, Firestore, pravidla, domény) najdete v README.md.</p>
+      <p class="mt-4 text-sm text-slate-500 dark:text-slate-400"><span data-i18n="setup.readme"></span> <a data-readme-link class="text-indigo-600 underline dark:text-indigo-400" target="_blank" rel="noopener">README</a></p>
       <p id="setup-detail" class="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/50 dark:text-red-300" hidden></p>
     </div>
   </section>
@@ -78,31 +78,35 @@
   <section id="screen-auth" class="flex min-h-screen items-center justify-center px-4 py-10" hidden>
     <div class="w-full max-w-sm">
       <div class="mb-6 text-center">
-        <h1 class="wordmark text-5xl" aria-label="Docházka">D<svg class="wordmark-heart" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>cházka</h1>
-        <p class="text-slate-500 dark:text-slate-400">Evidence docházky a banky přesčasů</p>
+        <h1 class="wordmark text-5xl" data-i18n-attr="aria-label:brand.name"><span data-i18n="brand.before" aria-hidden="true"></span><svg class="wordmark-heart" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span data-i18n="brand.after" aria-hidden="true"></span></h1>
+        <p class="text-slate-500 dark:text-slate-400" data-i18n="auth.tagline"></p>
+        <div class="mt-3 inline-flex rounded-full bg-white p-1 text-sm shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800" role="group" data-i18n-attr="aria-label:lang.label">
+          <button type="button" data-set-lang="cs" class="lang-btn rounded-full px-3 py-1 font-medium" data-i18n="lang.cs"></button>
+          <button type="button" data-set-lang="en" class="lang-btn rounded-full px-3 py-1 font-medium" data-i18n="lang.en"></button>
+        </div>
       </div>
       <div class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
         <button id="btn-google" type="button" class="flex w-full items-center justify-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 font-medium hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700">
           <svg class="h-5 w-5" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
-          Přihlásit přes Google
+          <span data-i18n="auth.google"></span>
         </button>
-        <div class="my-5 flex items-center gap-3 text-xs uppercase text-slate-400"><span class="h-px flex-1 bg-slate-200 dark:bg-slate-700"></span>nebo e-mailem<span class="h-px flex-1 bg-slate-200 dark:bg-slate-700"></span></div>
+        <div class="my-5 flex items-center gap-3 text-xs uppercase text-slate-400"><span class="h-px flex-1 bg-slate-200 dark:bg-slate-700"></span><span data-i18n="auth.orEmail"></span><span class="h-px flex-1 bg-slate-200 dark:bg-slate-700"></span></div>
         <form id="form-auth" class="space-y-3" novalidate>
           <label class="block">
-            <span class="text-sm font-medium">E-mail</span>
+            <span class="text-sm font-medium" data-i18n="auth.email"></span>
             <input name="email" type="email" autocomplete="email" required class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800">
           </label>
           <label class="block">
-            <span class="text-sm font-medium">Heslo</span>
+            <span class="text-sm font-medium" data-i18n="auth.password"></span>
             <input name="password" type="password" autocomplete="current-password" required minlength="6" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 dark:border-slate-700 dark:bg-slate-800">
           </label>
           <p id="auth-error" class="text-sm text-red-600 dark:text-red-400" hidden></p>
           <p id="auth-info" class="text-sm text-emerald-600 dark:text-emerald-400" hidden></p>
-          <button id="btn-auth-submit" type="submit" class="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">Přihlásit se</button>
+          <button id="btn-auth-submit" type="submit" class="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"></button>
         </form>
         <div class="mt-4 flex justify-between text-sm">
-          <button id="btn-auth-toggle" type="button" class="text-indigo-600 hover:underline dark:text-indigo-400">Vytvořit účet</button>
-          <button id="btn-auth-reset" type="button" class="text-slate-500 hover:underline dark:text-slate-400">Zapomenuté heslo</button>
+          <button id="btn-auth-toggle" type="button" class="text-indigo-600 hover:underline dark:text-indigo-400"></button>
+          <button id="btn-auth-reset" type="button" class="text-slate-500 hover:underline dark:text-slate-400" data-i18n="auth.forgot"></button>
         </div>
       </div>
     </div>
@@ -112,21 +116,23 @@
   <section id="screen-app" hidden>
     <header class="sticky top-0 z-20 border-b border-slate-200 bg-white/85 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85" style="padding-top: env(safe-area-inset-top, 0px)">
       <div class="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
-        <span class="wordmark text-2xl" role="img" aria-label="Docházka">D<svg class="wordmark-heart" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>cházka</span>
-        <nav class="ml-4 hidden gap-1 md:flex" aria-label="Sekce">
-          <button data-tab="overview" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium">Přehled</button>
-          <button data-tab="month" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium">Měsíc</button>
-          <button data-tab="plan" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium">Plán</button>
-          <button data-tab="bank" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium">Banka</button>
+        <span class="wordmark text-2xl" role="img" data-i18n-attr="aria-label:brand.name"><span data-i18n="brand.before"></span><svg class="wordmark-heart" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span data-i18n="brand.after"></span></span>
+        <nav class="ml-4 hidden gap-1 md:flex" data-i18n-attr="aria-label:nav.label">
+          <button data-tab="overview" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium" data-i18n="nav.overview"></button>
+          <button data-tab="month" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium" data-i18n="nav.month"></button>
+          <button data-tab="plan" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium" data-i18n="nav.plan"></button>
+          <button data-tab="bank" class="tab-btn rounded-lg px-3 py-1.5 text-sm font-medium" data-i18n="nav.bank"></button>
         </nav>
         <div class="ml-auto flex items-center gap-1">
-          <span id="offline-badge" class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/50 dark:text-amber-300" hidden>Offline</span>
-          <button id="btn-theme" type="button" class="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800" title="Přepnout motiv"></button>
+          <span id="offline-badge" class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/50 dark:text-amber-300" hidden data-i18n="status.offline"></span>
+          <button id="btn-lang" type="button" class="rounded-lg px-2 py-1.5 text-xs font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"></button>
+          <button id="btn-theme" type="button" class="rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"></button>
           <div class="relative">
             <button id="btn-user" type="button" class="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-indigo-100 text-sm font-semibold text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300" aria-haspopup="true"></button>
             <div id="user-menu" class="absolute right-0 mt-2 w-60 rounded-xl bg-white p-2 shadow-lg ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700" hidden>
               <p id="user-email" class="truncate px-3 py-2 text-sm text-slate-500 dark:text-slate-400"></p>
-              <button id="btn-logout" type="button" class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700">Odhlásit se</button>
+              <a data-readme-link target="_blank" rel="noopener" class="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-i18n="menu.help"></a>
+              <button id="btn-logout" type="button" class="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-100 dark:hover:bg-slate-700" data-i18n="menu.logout"></button>
             </div>
           </div>
         </div>
@@ -139,11 +145,11 @@
       <div id="tab-overview" class="space-y-4">
         <div id="overview-week" class="flex flex-wrap items-center gap-2"></div>
         <div class="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-5 text-white shadow-lg shadow-indigo-600/20">
-          <p class="text-sm font-medium text-indigo-100">Banka přesčasů</p>
+          <p class="text-sm font-medium text-indigo-100" data-i18n="bank.title"></p>
           <p id="bank-balance" class="tabular mt-1 text-4xl font-bold tracking-tight">–</p>
           <div class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-indigo-100">
-            <span>Tento měsíc: <b id="bank-month" class="tabular text-white">–</b></span>
-            <span>Fond měsíce: <b id="bank-fund" class="tabular text-white">–</b></span>
+            <span><span data-i18n="bank.thisMonth"></span> <b id="bank-month" class="tabular text-white">–</b></span>
+            <span><span data-i18n="bank.monthFund"></span> <b id="bank-fund" class="tabular text-white">–</b></span>
           </div>
         </div>
 
@@ -153,17 +159,17 @@
             <p id="today-plan-sub" class="text-sm text-slate-500 dark:text-slate-400"></p>
             <p id="today-plan-note" class="mt-1 text-sm text-amber-800 dark:text-amber-300" hidden></p>
           </div>
-          <button id="btn-use-plan" type="button" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700">Použít plán</button>
+          <button id="btn-use-plan" type="button" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700" data-i18n="today.usePlan"></button>
         </div>
 
         <div class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
           <div class="flex flex-wrap items-end gap-3">
             <label class="block flex-1 min-w-[9rem]">
-              <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Datum</span>
+              <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.date"></span>
               <input id="entry-date" type="date" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
             </label>
             <label class="block flex-1 min-w-[9rem]">
-              <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Typ dne</span>
+              <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.dayType"></span>
               <select id="entry-type" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></select>
             </label>
           </div>
@@ -171,18 +177,18 @@
 
           <div id="entry-work" class="mt-4">
             <label class="block">
-              <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Čas</span>
+              <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.time"></span>
               <div class="mt-1 flex gap-2">
                 <input id="entry-time" type="time" data-time24 class="tabular w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-2xl font-semibold dark:border-slate-700 dark:bg-slate-800">
-                <button id="btn-now" type="button" class="shrink-0 rounded-xl border border-slate-300 px-4 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800">Teď</button>
+                <button id="btn-now" type="button" class="shrink-0 rounded-xl border border-slate-300 px-4 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800" data-i18n="common.now"></button>
               </div>
             </label>
             <div class="mt-4 grid grid-cols-2 gap-3">
               <button id="btn-arrival" type="button" class="flex flex-col items-center rounded-2xl bg-emerald-600 px-4 py-4 font-semibold text-white shadow-sm hover:bg-emerald-700 active:scale-[.98]">
-                <span class="text-2xl" aria-hidden="true">→</span>Příchod
+                <span class="text-2xl" aria-hidden="true">→</span><span data-i18n="entry.arrival"></span>
               </button>
               <button id="btn-departure" type="button" class="flex flex-col items-center rounded-2xl bg-rose-600 px-4 py-4 font-semibold text-white shadow-sm hover:bg-rose-700 active:scale-[.98]">
-                <span class="text-2xl" aria-hidden="true">←</span>Odchod
+                <span class="text-2xl" aria-hidden="true">←</span><span data-i18n="entry.departure"></span>
               </button>
             </div>
           </div>
@@ -192,29 +198,29 @@
           <p id="entry-error" class="mt-3 text-sm text-red-600 dark:text-red-400" hidden></p>
 
           <div id="entry-status" class="mt-5 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-sm sm:grid-cols-4 dark:border-slate-800"></div>
-          <button id="btn-entry-edit" type="button" class="mt-3 text-sm text-indigo-600 hover:underline dark:text-indigo-400">Upravit den podrobně…</button>
+          <button id="btn-entry-edit" type="button" class="mt-3 text-sm text-indigo-600 hover:underline dark:text-indigo-400" data-i18n="entry.editDetail"></button>
         </div>
       </div>
 
       <!-- ---------- Měsíc ---------- -->
       <div id="tab-month" class="space-y-4" hidden>
         <div class="flex items-center gap-2">
-          <button id="btn-month-prev" type="button" class="rounded-xl p-2.5 hover:bg-white dark:hover:bg-slate-900" aria-label="Předchozí měsíc">
+          <button id="btn-month-prev" type="button" class="rounded-xl p-2.5 hover:bg-white dark:hover:bg-slate-900" data-i18n-attr="aria-label:common.prevMonth">
             <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.8 15.2a1 1 0 0 1-1.4 0l-4.5-4.5a1 1 0 0 1 0-1.4l4.5-4.5a1 1 0 1 1 1.4 1.4L9 10l3.8 3.8a1 1 0 0 1 0 1.4z" clip-rule="evenodd"/></svg>
           </button>
           <h2 id="month-title" class="flex-1 text-center text-lg font-bold"></h2>
-          <button id="btn-month-next" type="button" class="rounded-xl p-2.5 hover:bg-white dark:hover:bg-slate-900" aria-label="Další měsíc">
+          <button id="btn-month-next" type="button" class="rounded-xl p-2.5 hover:bg-white dark:hover:bg-slate-900" data-i18n-attr="aria-label:common.nextMonth">
             <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.2 4.8a1 1 0 0 1 1.4 0l4.5 4.5a1 1 0 0 1 0 1.4l-4.5 4.5a1 1 0 0 1-1.4-1.4L11 10 7.2 6.2a1 1 0 0 1 0-1.4z" clip-rule="evenodd"/></svg>
           </button>
         </div>
         <div class="flex justify-center gap-2">
-          <button id="btn-month-today" type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-white dark:text-indigo-400 dark:hover:bg-slate-900">Aktuální měsíc</button>
-          <button id="btn-export" type="button" class="rounded-lg bg-white px-3 py-1.5 text-sm font-medium shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:ring-slate-800 dark:hover:bg-slate-800">⬇ Export CSV</button>
+          <button id="btn-month-today" type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-white dark:text-indigo-400 dark:hover:bg-slate-900" data-i18n="common.currentMonth"></button>
+          <button id="btn-export" type="button" class="rounded-lg bg-white px-3 py-1.5 text-sm font-medium shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:ring-slate-800 dark:hover:bg-slate-800">⬇ <span data-i18n="month.export"></span></button>
         </div>
 
         <div id="month-summary" class="grid grid-cols-2 gap-3 sm:grid-cols-4"></div>
         <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-          <div class="flex justify-between text-sm text-slate-500 dark:text-slate-400"><span>Plnění fondu</span><span id="month-progress-text" class="tabular"></span></div>
+          <div class="flex justify-between text-sm text-slate-500 dark:text-slate-400"><span data-i18n="month.fundProgress"></span><span id="month-progress-text" class="tabular"></span></div>
           <div class="mt-2 h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><div id="month-progress" class="h-full rounded-full bg-indigo-600 transition-all" style="width:0"></div></div>
         </div>
 
@@ -226,45 +232,45 @@
         <div id="plan-week" class="flex flex-wrap items-center gap-2"></div>
 
         <div>
-          <h2 class="mb-2 text-lg font-bold">Rozvrh příchodů a odchodů</h2>
-          <p class="mb-3 text-sm text-slate-500 dark:text-slate-400">Volitelný pevný příchod a odchod pro dny lichého a sudého týdne (např. vyzvedávání dítěte). Prázdné pole na straně pevného času se doplní kotvou z nastavení, druhé se dopočítá tak, aby měsíc vyšel do fondu. Den s oběma časy je plně pevný.</p>
+          <h2 class="mb-2 text-lg font-bold" data-i18n="schedule.title"></h2>
+          <p class="mb-3 text-sm text-slate-500 dark:text-slate-400" data-i18n="schedule.intro"></p>
           <div id="plan-weeks" class="grid gap-4 md:grid-cols-2"></div>
         </div>
 
         <details class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-          <summary class="cursor-pointer px-5 py-4 font-semibold">Nastavení pracovní doby a plánu</summary>
+          <summary class="cursor-pointer px-5 py-4 font-semibold" data-i18n="settings.title"></summary>
           <form id="form-plan-settings" class="grid grid-cols-2 gap-3 px-5 pb-5 sm:grid-cols-3" novalidate>
             <div class="col-span-full">
-              <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevný čas</span>
+              <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.anchor"></span>
               <div class="mt-1 grid grid-cols-2 gap-3">
-                <label class="block"><span class="sr-only">Pevný čas – druh</span>
+                <label class="block"><span class="sr-only" data-i18n="settings.anchorKind"></span>
                   <select name="anchorMode" class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
-                    <option value="arrival">Příchod</option>
-                    <option value="departure">Odchod</option>
+                    <option value="arrival" data-i18n="anchor.arrival"></option>
+                    <option value="departure" data-i18n="anchor.departure"></option>
                   </select></label>
-                <label class="block"><span class="sr-only">Pevný čas</span>
+                <label class="block"><span class="sr-only" data-i18n="settings.anchorTime"></span>
                   <input name="anchorTime" type="time" data-time24 class="tabular w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
               </div>
               <p id="anchor-hint" class="mt-1 text-xs text-slate-500 dark:text-slate-400"></p>
             </div>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Nejdřívější příchod</span>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.earliest"></span>
               <input name="earliestArrival" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Nejpozdější odchod</span>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.latest"></span>
               <input name="latestDeparture" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevná doba od</span>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.coreStart"></span>
               <input name="coreStart" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevná doba do</span>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.coreEnd"></span>
               <input name="coreEnd" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Denní fond (h)</span>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.dailyFund"></span>
               <input name="dailyFundHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Max. práce za den (h)</span>
+            <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.maxWorked"></span>
               <input name="maxWorkedHoursPerDay" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
             <fieldset class="col-span-full rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
-              <legend class="px-1 text-sm font-semibold">Polední přestávka</legend>
+              <legend class="px-1 text-sm font-semibold" data-i18n="settings.break"></legend>
               <div class="grid grid-cols-2 gap-3">
-                <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Po každých (h pobytu)</span>
+                <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.breakAfter"></span>
                   <input name="breakAfterHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-                <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Odečíst (min)</span>
+                <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.breakLength"></span>
                   <input name="breakLengthMinutes" type="number" min="0" max="600" step="5" inputmode="numeric" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
               </div>
               <p id="break-rule-text" class="mt-2 text-xs text-slate-600 dark:text-slate-400"></p>
@@ -272,109 +278,123 @@
               <p id="break-rule-error" class="mt-1 text-sm text-red-600 dark:text-red-400" hidden></p>
             </fieldset>
             <ul id="plan-settings-warnings" class="col-span-full space-y-1 rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" hidden></ul>
-            <p class="col-span-full text-xs text-slate-500 dark:text-slate-400">Změny se ukládají automaticky. Denní fond a přestávka platí pro celou aplikaci (přesčasy, banka, měsíční fond, plán); u jejich změny zvolíte, od kdy platí – starší dny se počítají podle původních pravidel.</p>
+            <fieldset class="col-span-full rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
+              <legend class="px-1 text-sm font-semibold" data-i18n="settings.app"></legend>
+              <div class="grid grid-cols-2 gap-3">
+                <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="lang.label"></span>
+                  <select name="language" data-app-setting class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                    <option value="cs" data-i18n="lang.cs"></option>
+                    <option value="en" data-i18n="lang.en"></option>
+                  </select></label>
+                <label class="flex items-center gap-2 self-end pb-2.5 text-sm">
+                  <input name="czHolidays" type="checkbox" data-app-setting class="h-4 w-4 rounded border-slate-300 text-indigo-600 dark:border-slate-600">
+                  <span data-i18n="settings.czHolidays"></span></label>
+              </div>
+              <p class="mt-2 text-xs text-slate-600 dark:text-slate-400" data-i18n="settings.czHolidaysHint"></p>
+            </fieldset>
+            <p class="col-span-full text-xs text-slate-500 dark:text-slate-400" data-i18n="settings.autosave"></p>
           </form>
         </details>
 
         <div>
           <div class="flex items-center gap-2">
-            <button id="btn-plan-prev" type="button" class="rounded-xl p-2.5 hover:bg-white dark:hover:bg-slate-900" aria-label="Předchozí měsíc">
+            <button id="btn-plan-prev" type="button" class="rounded-xl p-2.5 hover:bg-white dark:hover:bg-slate-900" data-i18n-attr="aria-label:common.prevMonth">
               <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M12.8 15.2a1 1 0 0 1-1.4 0l-4.5-4.5a1 1 0 0 1 0-1.4l4.5-4.5a1 1 0 1 1 1.4 1.4L9 10l3.8 3.8a1 1 0 0 1 0 1.4z" clip-rule="evenodd"/></svg>
             </button>
-            <h2 class="flex-1 text-center text-lg font-bold">Plán: <span id="plan-month-title"></span></h2>
-            <button id="btn-plan-next" type="button" class="rounded-xl p-2.5 hover:bg-white dark:hover:bg-slate-900" aria-label="Další měsíc">
+            <h2 class="flex-1 text-center text-lg font-bold"><span data-i18n="plan.titlePrefix"></span> <span id="plan-month-title"></span></h2>
+            <button id="btn-plan-next" type="button" class="rounded-xl p-2.5 hover:bg-white dark:hover:bg-slate-900" data-i18n-attr="aria-label:common.nextMonth">
               <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.2 4.8a1 1 0 0 1 1.4 0l4.5 4.5a1 1 0 0 1 0 1.4l-4.5 4.5a1 1 0 0 1-1.4-1.4L11 10 7.2 6.2a1 1 0 0 1 0-1.4z" clip-rule="evenodd"/></svg>
             </button>
           </div>
           <div class="mt-1 flex flex-wrap justify-center gap-2">
-            <button id="btn-plan-today" type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-white dark:text-indigo-400 dark:hover:bg-slate-900">Aktuální měsíc</button>
+            <button id="btn-plan-today" type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-white dark:text-indigo-400 dark:hover:bg-slate-900" data-i18n="common.currentMonth"></button>
             <button id="btn-bulk-fill" type="button" class="rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-700" hidden></button>
-            <button id="btn-bulk-clear" type="button" class="rounded-lg bg-white px-3 py-1.5 text-sm font-medium shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:ring-slate-800 dark:hover:bg-slate-800">Zrušit pevné časy v rozsahu…</button>
+            <button id="btn-bulk-clear" type="button" class="rounded-lg bg-white px-3 py-1.5 text-sm font-medium shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:ring-slate-800 dark:hover:bg-slate-800" data-i18n="plan.bulkClear"></button>
           </div>
         </div>
         <div id="bulk-undo" class="flex flex-wrap items-center gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white dark:bg-white dark:text-slate-900" hidden>
           <span id="bulk-undo-text" class="flex-1"></span>
-          <button id="btn-bulk-undo" type="button" class="rounded-lg bg-white/15 px-3 py-1.5 font-semibold hover:bg-white/25 dark:bg-slate-900/10 dark:hover:bg-slate-900/20">Vrátit</button>
-          <button id="btn-bulk-undo-close" type="button" class="rounded-lg px-2 py-1.5 opacity-70 hover:opacity-100" aria-label="Skrýt">✕</button>
+          <button id="btn-bulk-undo" type="button" class="rounded-lg bg-white/15 px-3 py-1.5 font-semibold hover:bg-white/25 dark:bg-slate-900/10 dark:hover:bg-slate-900/20" data-i18n="common.undo"></button>
+          <button id="btn-bulk-undo-close" type="button" class="rounded-lg px-2 py-1.5 opacity-70 hover:opacity-100" data-i18n-attr="aria-label:common.hide">✕</button>
         </div>
         <div id="plan-summary" class="grid grid-cols-2 gap-2 sm:grid-cols-3"></div>
         <ul id="plan-warnings" class="space-y-1 rounded-2xl bg-amber-50 p-4 text-sm font-medium text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900" hidden></ul>
         <div class="flex flex-wrap gap-1.5 text-[11px] font-medium">
-          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300">proběhlo</span>
-          <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200">plánováno</span>
-          <span class="rounded-full bg-violet-100 px-2 py-0.5 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200">pevný čas / den</span>
-          <span class="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">výjimka</span>
-          <span class="rounded-full bg-teal-100 px-2 py-0.5 text-teal-800 dark:bg-teal-900/60 dark:text-teal-200">doplněno</span>
-          <span class="rounded-full bg-sky-100 px-2 py-0.5 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200">nepřítomnost</span>
-          <span class="rounded-full bg-rose-100 px-2 py-0.5 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200">chybí záznam</span>
-          <span class="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">📝 poznámka</span>
-          <span class="rounded-full bg-slate-200 px-2 py-0.5 text-slate-700 dark:bg-slate-700 dark:text-slate-200">bez pevného času</span>
+          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300" data-i18n="legend.done"></span>
+          <span class="rounded-full bg-indigo-100 px-2 py-0.5 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200" data-i18n="legend.regular"></span>
+          <span class="rounded-full bg-violet-100 px-2 py-0.5 text-violet-800 dark:bg-violet-900/60 dark:text-violet-200" data-i18n="legend.fixed"></span>
+          <span class="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200" data-i18n="legend.override"></span>
+          <span class="rounded-full bg-teal-100 px-2 py-0.5 text-teal-800 dark:bg-teal-900/60 dark:text-teal-200" data-i18n="legend.filled"></span>
+          <span class="rounded-full bg-sky-100 px-2 py-0.5 text-sky-800 dark:bg-sky-900/60 dark:text-sky-200" data-i18n="legend.absence"></span>
+          <span class="rounded-full bg-rose-100 px-2 py-0.5 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200" data-i18n="legend.missing"></span>
+          <span class="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200" data-i18n="legend.note"></span>
+          <span class="rounded-full bg-slate-200 px-2 py-0.5 text-slate-700 dark:bg-slate-700 dark:text-slate-200" data-i18n="legend.cleared"></span>
         </div>
         <div class="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
           <table id="plan-table" class="w-full text-[13px]">
             <thead class="text-left text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <tr>
-                <th class="px-2 py-2 font-medium">Datum</th>
-                <th class="px-1 py-2 font-medium">Typ</th>
-                <th class="px-1.5 py-2 text-right font-medium">Přích.</th>
-                <th class="px-1.5 py-2 text-right font-medium">Odch.</th>
-                <th class="px-1.5 py-2 text-right font-medium" title="Plánované hodiny">Plán</th>
-                <th class="px-1.5 py-2 text-right font-medium" title="Skutečnost (h)">Skut.</th>
+                <th class="px-2 py-2 font-medium" data-i18n="table.date"></th>
+                <th class="px-1 py-2 font-medium" data-i18n="table.type"></th>
+                <th class="px-1.5 py-2 text-right font-medium" data-i18n="table.arrival"></th>
+                <th class="px-1.5 py-2 text-right font-medium" data-i18n="table.departure"></th>
+                <th class="px-1.5 py-2 text-right font-medium" data-i18n="table.plan" data-i18n-attr="title:table.planTitle"></th>
+                <th class="px-1.5 py-2 text-right font-medium" data-i18n="table.actual" data-i18n-attr="title:table.actualTitle"></th>
               </tr>
             </thead>
             <tbody></tbody>
           </table>
         </div>
-        <p class="text-xs text-slate-500 dark:text-slate-400">Časy u budoucích dnů (kurzívou) jsou plánované, u proběhlých skutečné. Klepnutím na dnešní nebo budoucí den nastavíte výjimku (dovolená, lékař, pevný příchod/odchod či hodiny). Proběhlý den otevře úpravu docházky.</p>
+        <p class="text-xs text-slate-500 dark:text-slate-400" data-i18n="plan.tableHint"></p>
       </div>
 
       <!-- ---------- Banka ---------- -->
       <div id="tab-bank" class="space-y-4" hidden>
         <div class="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-5 text-white shadow-lg shadow-indigo-600/20">
-          <p class="text-sm font-medium text-indigo-100">Zůstatek banky přesčasů</p>
+          <p class="text-sm font-medium text-indigo-100" data-i18n="bank.balanceTitle"></p>
           <p id="bank-balance-2" class="tabular mt-1 text-4xl font-bold tracking-tight">–</p>
         </div>
         <form id="form-withdraw" class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800" novalidate>
-          <h2 class="font-semibold">Vybrat náhradní volno</h2>
-          <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Pro celý den můžete také nastavit typ dne „Náhradní volno“ – odečte se automaticky.</p>
+          <h2 class="font-semibold" data-i18n="bank.withdrawTitle"></h2>
+          <p class="mt-1 text-sm text-slate-500 dark:text-slate-400" data-i18n="bank.withdrawHint"></p>
           <div class="mt-4 grid grid-cols-2 gap-3">
             <label class="block">
-              <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Datum</span>
+              <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.date"></span>
               <input name="date" type="date" required class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
             </label>
             <label class="block">
-              <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Počet hodin</span>
-              <input name="hours" type="number" inputmode="decimal" min="0.25" step="0.25" required placeholder="např. 2,5" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+              <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="bank.hours"></span>
+              <input name="hours" type="number" inputmode="decimal" min="0.25" step="0.25" required data-i18n-attr="placeholder:bank.hoursPlaceholder" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
             </label>
             <label class="col-span-2 block">
-              <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Poznámka (nepovinné)</span>
+              <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.noteOptional"></span>
               <input name="note" type="text" maxlength="200" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
             </label>
           </div>
           <p id="withdraw-error" class="mt-3 text-sm text-red-600 dark:text-red-400" hidden></p>
-          <button id="btn-withdraw" type="submit" class="mt-4 w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">Vybrat z banky</button>
+          <button id="btn-withdraw" type="submit" class="mt-4 w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50" data-i18n="bank.withdraw"></button>
         </form>
         <div class="rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
-          <h2 class="px-5 pt-4 font-semibold">Historie čerpání</h2>
+          <h2 class="px-5 pt-4 font-semibold" data-i18n="bank.history"></h2>
           <ul id="bank-history" class="mt-2 divide-y divide-slate-100 dark:divide-slate-800"></ul>
         </div>
       </div>
     </main>
 
     <!-- Spodní navigace (mobil) -->
-    <nav class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur md:hidden dark:border-slate-800 dark:bg-slate-900/90" aria-label="Sekce">
+    <nav class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur md:hidden dark:border-slate-800 dark:bg-slate-900/90" data-i18n-attr="aria-label:nav.label">
       <div class="mx-auto grid max-w-md grid-cols-4">
         <button data-tab="overview" class="tab-btn flex flex-col items-center gap-0.5 py-2 text-xs font-medium">
-          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>Přehled
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg><span data-i18n="nav.overview"></span>
         </button>
         <button data-tab="month" class="tab-btn flex flex-col items-center gap-0.5 py-2 text-xs font-medium">
-          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path stroke-linecap="round" d="M3.5 10h17M8 3v4M16 3v4"/></svg>Měsíc
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path stroke-linecap="round" d="M3.5 10h17M8 3v4M16 3v4"/></svg><span data-i18n="nav.month"></span>
         </button>
         <button data-tab="plan" class="tab-btn flex flex-col items-center gap-0.5 py-2 text-xs font-medium">
-          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H6.5A1.5 1.5 0 0 0 5 6.5v12A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 17.5 5H15M9 5a1.5 1.5 0 0 0 1.5 1.5h3A1.5 1.5 0 0 0 15 5M9 5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5m-6 7 2 2 4-4"/></svg>Plán
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H6.5A1.5 1.5 0 0 0 5 6.5v12A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 17.5 5H15M9 5a1.5 1.5 0 0 0 1.5 1.5h3A1.5 1.5 0 0 0 15 5M9 5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5m-6 7 2 2 4-4"/></svg><span data-i18n="nav.plan"></span>
         </button>
         <button data-tab="bank" class="tab-btn flex flex-col items-center gap-0.5 py-2 text-xs font-medium">
-          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10 12 4l9 6M5 10v8m4.7-8v8m4.6-8v8M19 10v8M3 20h18"/></svg>Banka
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10 12 4l9 6M5 10v8m4.7-8v8m4.6-8v8M19 10v8M3 20h18"/></svg><span data-i18n="nav.bank"></span>
         </button>
       </div>
     </nav>
@@ -387,39 +407,39 @@
       <p id="dlg-day-sub" class="text-sm text-slate-500 dark:text-slate-400"></p>
       <div class="mt-4 space-y-3">
         <label class="block">
-          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Typ dne</span>
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.dayType"></span>
           <select name="type" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></select>
         </label>
         <label id="dlg-day-absence" class="block">
-          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Nepřítomnost (h)</span>
-          <input name="absenceHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" placeholder="celý den" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
-          <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">Prázdné = celý den. Při části dne zadejte i příchod a odchod odpracované části.</span>
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="day.absenceHours"></span>
+          <input name="absenceHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" data-i18n-attr="placeholder:common.wholeDay" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+          <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400" data-i18n="day.absenceHint"></span>
         </label>
         <div id="dlg-day-times" class="grid grid-cols-2 gap-3">
           <label class="block">
-            <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Příchod</span>
+            <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.arrival"></span>
             <input name="arrival" type="time" data-time24 data-optional class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
           </label>
           <label class="block">
-            <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Odchod</span>
+            <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.departure"></span>
             <input name="departure" type="time" data-time24 data-optional class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
           </label>
         </div>
         <label class="block">
-          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Poznámka</span>
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="field.note"></span>
           <input name="note" type="text" maxlength="200" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         </label>
         <div class="flex items-center gap-2">
-          <button id="dlg-day-fill" type="button" class="rounded-xl bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-100 dark:bg-teal-950/50 dark:text-teal-300 dark:hover:bg-teal-900/50">Doplnit docházku</button>
-          <span id="dlg-day-filled" class="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800 dark:bg-teal-900/60 dark:text-teal-200" hidden>doplněno</span>
+          <button id="dlg-day-fill" type="button" class="rounded-xl bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-100 dark:bg-teal-950/50 dark:text-teal-300 dark:hover:bg-teal-900/50" data-i18n="fill.button"></button>
+          <span id="dlg-day-filled" class="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800 dark:bg-teal-900/60 dark:text-teal-200" hidden data-i18n="tag.filled"></span>
         </div>
         <p id="dlg-day-preview" class="tabular rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300"></p>
         <p id="dlg-day-error" class="text-sm text-red-600 dark:text-red-400" hidden></p>
       </div>
       <div class="mt-5 flex items-center gap-2">
-        <button id="dlg-day-delete" type="button" class="rounded-xl px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">Smazat</button>
-        <button value="cancel" formnovalidate class="ml-auto rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800">Zrušit</button>
-        <button id="dlg-day-save" value="save" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">Uložit</button>
+        <button id="dlg-day-delete" type="button" class="rounded-xl px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40" data-i18n="common.delete"></button>
+        <button value="cancel" formnovalidate class="ml-auto rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="common.cancel"></button>
+        <button id="dlg-day-save" value="save" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50" data-i18n="common.save"></button>
       </div>
     </form>
   </dialog>
@@ -429,8 +449,8 @@
     <form method="dialog" class="p-5">
       <p id="dlg-confirm-text" class="whitespace-pre-line text-base"></p>
       <div class="mt-5 flex justify-end gap-2">
-        <button value="cancel" class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800">Zrušit</button>
-        <button id="dlg-confirm-ok" value="ok" class="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700">Potvrdit</button>
+        <button value="cancel" class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="common.cancel"></button>
+        <button id="dlg-confirm-ok" value="ok" class="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700"></button>
       </div>
     </form>
   </dialog>
@@ -443,46 +463,46 @@
       <p id="ov-schedule" class="mt-1 text-sm text-slate-600 dark:text-slate-300"></p>
       <div class="mt-4 grid grid-cols-2 gap-3">
         <label class="col-span-2 block">
-          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Nepřítomnost</span>
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="ov.absence"></span>
           <select name="absenceType" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></select>
         </label>
         <label id="ov-absence-hours" class="col-span-2 block">
-          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Hodin nepřítomnosti</span>
-          <input name="absenceHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" placeholder="celý den" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="ov.absenceHours"></span>
+          <input name="absenceHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" data-i18n-attr="placeholder:common.wholeDay" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         </label>
         <label class="block">
-          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevný příchod</span>
-          <input name="arriveAt" type="time" data-time24 data-optional data-empty-label="podle rozvrhu" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="ov.arriveAt"></span>
+          <input name="arriveAt" type="time" data-time24 data-optional data-empty-label-key="ov.bySchedule" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         </label>
         <label class="block">
-          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevný odchod</span>
-          <input name="leaveAt" type="time" data-time24 data-optional data-empty-label="podle rozvrhu" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="ov.leaveAt"></span>
+          <input name="leaveAt" type="time" data-time24 data-optional data-empty-label-key="ov.bySchedule" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         </label>
         <label id="ov-clear-arrival-wrap" class="flex items-start gap-2 text-sm">
           <input name="clearArrival" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 dark:border-slate-600">
-          <span>Zrušit pevný příchod z rozvrhu <span id="ov-clear-arrival-time" class="text-slate-500 dark:text-slate-400"></span></span>
+          <span><span data-i18n="ov.clearArrival"></span> <span id="ov-clear-arrival-time" class="text-slate-500 dark:text-slate-400"></span></span>
         </label>
         <label id="ov-clear-leave-wrap" class="flex items-start gap-2 text-sm">
           <input name="clearLeave" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 dark:border-slate-600">
-          <span>Zrušit pevný odchod z rozvrhu <span id="ov-clear-leave-time" class="text-slate-500 dark:text-slate-400"></span></span>
+          <span><span data-i18n="ov.clearLeave"></span> <span id="ov-clear-leave-time" class="text-slate-500 dark:text-slate-400"></span></span>
         </label>
         <label class="col-span-2 block">
-          <span class="text-sm font-medium text-slate-600 dark:text-slate-400">Pevné hodiny práce</span>
-          <input name="workedHours" type="number" min="0" max="24" step="0.25" inputmode="decimal" placeholder="dopočítat" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="ov.workedHours"></span>
+          <input name="workedHours" type="number" min="0" max="24" step="0.25" inputmode="decimal" data-i18n-attr="placeholder:ov.compute" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         </label>
         <label class="col-span-2 block">
-          <span class="flex justify-between text-sm font-medium text-slate-600 dark:text-slate-400"><span>Poznámka k plánu</span><span id="ov-note-count" class="tabular text-xs font-normal"></span></span>
-          <textarea name="note" rows="2" maxlength="200" placeholder="např. vyzvednout dítě, porada…" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></textarea>
-          <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">Poznámka k plánu je oddělená od poznámky v docházce.</span>
+          <span class="flex justify-between text-sm font-medium text-slate-600 dark:text-slate-400"><span data-i18n="ov.note"></span><span id="ov-note-count" class="tabular text-xs font-normal"></span></span>
+          <textarea name="note" rows="2" maxlength="200" data-i18n-attr="placeholder:ov.notePlaceholder" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></textarea>
+          <span class="mt-1 block text-xs text-slate-500 dark:text-slate-400" data-i18n="ov.noteHint"></span>
         </label>
       </div>
       <ul id="ov-warnings" class="mt-3 space-y-1 rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" hidden></ul>
       <p id="ov-preview" class="tabular mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300"></p>
       <p id="ov-error" class="mt-2 text-sm text-red-600 dark:text-red-400" hidden></p>
       <div class="mt-5 flex items-center gap-2">
-        <button id="ov-delete" type="button" class="rounded-xl px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40">Zrušit výjimku</button>
-        <button value="cancel" formnovalidate class="ml-auto rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800">Zavřít</button>
-        <button id="ov-save" value="save" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">Uložit</button>
+        <button id="ov-delete" type="button" class="rounded-xl px-3 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40" data-i18n="ov.delete"></button>
+        <button value="cancel" formnovalidate class="ml-auto rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="common.close"></button>
+        <button id="ov-save" value="save" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50" data-i18n="common.save"></button>
       </div>
     </form>
   </dialog>
@@ -490,12 +510,12 @@
   <!-- ===== Náhled hromadného doplnění ===== -->
   <dialog id="dlg-fill" class="w-[calc(100%-2rem)] max-w-md rounded-2xl bg-white p-0 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-slate-100">
     <form method="dialog" class="p-5">
-      <h2 class="text-lg font-bold">Doplnit docházku</h2>
+      <h2 class="text-lg font-bold" data-i18n="fill.button"></h2>
       <p id="fill-count" class="mt-1 text-sm text-slate-500 dark:text-slate-400"></p>
       <ul id="fill-list" class="mt-3 max-h-80 divide-y divide-slate-100 overflow-y-auto text-sm dark:divide-slate-800"></ul>
       <div class="mt-5 flex justify-end gap-2">
-        <button value="cancel" class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800">Zrušit</button>
-        <button value="ok" class="rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">Doplnit</button>
+        <button value="cancel" class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="common.cancel"></button>
+        <button value="ok" class="rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700" data-i18n="fill.ok"></button>
       </div>
     </form>
   </dialog>
@@ -503,22 +523,22 @@
   <!-- ===== Hromadné zrušení pevných časů ===== -->
   <dialog id="dlg-bulk-clear" class="w-[calc(100%-2rem)] max-w-md rounded-2xl bg-white p-0 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-slate-100">
     <form id="form-bulk-clear" method="dialog" class="p-5" novalidate>
-      <h2 class="text-lg font-bold">Zrušit pevné časy v rozsahu</h2>
-      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Pro dnešní a budoucí pracovní dny v rozsahu se ignorují pevné časy z rozvrhu (kotva z nastavení zůstává). Dny se dopočítají jako běžné.</p>
+      <h2 class="text-lg font-bold" data-i18n="bulk.title"></h2>
+      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400" data-i18n="bulk.intro"></p>
       <div class="mt-4 grid grid-cols-2 gap-3">
-        <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Od</span><input name="from" type="date" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-        <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Do</span><input name="to" type="date" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
-        <label class="col-span-2 block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400">Zrušit</span>
+        <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="bulk.from"></span><input name="from" type="date" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+        <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="bulk.to"></span><input name="to" type="date" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+        <label class="col-span-2 block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="bulk.what"></span>
           <select name="what" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
-            <option value="leave">pevný odchod</option>
-            <option value="arrival">pevný příchod</option>
-            <option value="both">příchod i odchod</option>
+            <option value="leave" data-i18n="bulk.leave"></option>
+            <option value="arrival" data-i18n="bulk.arrival"></option>
+            <option value="both" data-i18n="bulk.both"></option>
           </select></label>
       </div>
       <p id="bulk-clear-preview" class="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300"></p>
       <div class="mt-5 flex justify-end gap-2">
-        <button value="cancel" formnovalidate class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800">Zavřít</button>
-        <button id="bulk-clear-ok" value="ok" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">Zrušit pevné časy</button>
+        <button value="cancel" formnovalidate class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="common.close"></button>
+        <button id="bulk-clear-ok" value="ok" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50" data-i18n="bulk.ok"></button>
       </div>
     </form>
   </dialog>
@@ -526,23 +546,36 @@
   <!-- ===== Změna pravidel výpočtu (ochrana historie) ===== -->
   <dialog id="dlg-rules" class="w-[calc(100%-2rem)] max-w-md rounded-2xl bg-white p-0 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-slate-100">
     <form id="form-rules" method="dialog" class="p-5" novalidate>
-      <h2 class="text-lg font-bold">Změna pravidel výpočtu</h2>
+      <h2 id="rules-title" class="text-lg font-bold"></h2>
       <p id="rules-change-text" class="mt-1 text-sm text-slate-600 dark:text-slate-300"></p>
-      <fieldset class="mt-4 space-y-2 text-sm">
+      <fieldset id="rules-scope" class="mt-4 space-y-2 text-sm">
         <label class="flex items-center gap-2">
           <input type="radio" name="scope" value="from" checked class="h-4 w-4 rounded border-slate-300 text-indigo-600 dark:border-slate-600">
-          <span>Platí od</span>
+          <span data-i18n="rules.validFrom"></span>
           <input name="from" type="date" class="rounded-lg border border-slate-300 bg-white px-2 py-1 dark:border-slate-700 dark:bg-slate-800">
         </label>
         <label class="flex items-center gap-2">
           <input type="radio" name="scope" value="all" class="h-4 w-4 rounded border-slate-300 text-indigo-600 dark:border-slate-600">
-          <span>Zpětně pro všechna data (přepočítá historii)</span>
+          <span data-i18n="rules.retro"></span>
         </label>
       </fieldset>
       <div id="rules-impact" class="mt-3 rounded-xl px-3 py-2 text-sm"></div>
       <div class="mt-5 flex justify-end gap-2">
-        <button value="cancel" formnovalidate class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800">Zrušit</button>
-        <button value="ok" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700">Uložit změnu</button>
+        <button value="cancel" formnovalidate class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="common.cancel"></button>
+        <button value="ok" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700" data-i18n="rules.save"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ===== Dotaz na české státní svátky (po změně jazyka) ===== -->
+  <dialog id="dlg-holidays" class="w-[calc(100%-2rem)] max-w-md rounded-2xl bg-white p-0 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-slate-100">
+    <form method="dialog" class="p-5">
+      <h2 class="text-lg font-bold" data-i18n="holidays.askTitle"></h2>
+      <p class="mt-1 text-sm text-slate-600 dark:text-slate-300" data-i18n="holidays.askText"></p>
+      <div id="holidays-impact" class="mt-3 rounded-xl px-3 py-2 text-sm"></div>
+      <div class="mt-5 flex justify-end gap-2">
+        <button id="holidays-keep" value="keep" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700" data-i18n="holidays.keep"></button>
+        <button id="holidays-off" value="off" class="rounded-xl px-4 py-2.5 text-sm font-medium ring-1 ring-slate-300 hover:bg-slate-100 dark:ring-slate-700 dark:hover:bg-slate-800" data-i18n="holidays.turnOff"></button>
       </div>
     </form>
   </dialog>

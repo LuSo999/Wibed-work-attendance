@@ -4,7 +4,10 @@
 // (mřížka hodin 00–23, mřížka minut po 5 + jemné ±1 min, psaní číslicemi z klávesnice).
 // Původní input zůstane jako skrytý nosič hodnoty 'HH:MM' (stejné id/name),
 // takže zbytek aplikace s ním pracuje beze změny – čte i nastavuje .value
-// a poslouchá událost 'input'. Atribut data-empty-label nastaví text prázdné hodnoty.
+// a poslouchá událost 'input'. Atribut data-empty-label (text) nebo data-empty-label-key
+// (klíč slovníku) nastaví text prázdné hodnoty. Texty se po změně jazyka obnoví (refreshTimeInputs).
+import { t } from './i18n.js';
+
 const pad = (n) => String(n).padStart(2, '0');
 const valueDesc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
 
@@ -41,9 +44,9 @@ function buildDialog() {
       <p data-el="hint" class="mt-2 text-center text-xs text-slate-400 dark:text-slate-500"></p>
       <div data-el="grid" class="mt-3 grid gap-1.5"></div>
       <div class="mt-5 flex items-center gap-1">
-        <button type="button" data-act="now" class="rounded-xl px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/50">Teď</button>
-        <button type="button" data-act="clear" class="rounded-xl px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">Vymazat</button>
-        <button type="button" data-act="cancel" class="ml-auto rounded-xl px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800">Zrušit</button>
+        <button type="button" data-act="now" class="rounded-xl px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950/50"></button>
+        <button type="button" data-act="clear" class="rounded-xl px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"></button>
+        <button type="button" data-act="cancel" class="ml-auto rounded-xl px-3 py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800"></button>
         <button type="button" data-act="ok" class="rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white hover:bg-indigo-700">OK</button>
       </div>
     </div>`;
@@ -112,7 +115,10 @@ function render() {
   hBtn.setAttribute('aria-pressed', picker.mode === 'h');
   mBtn.setAttribute('aria-pressed', picker.mode === 'm');
   q('[data-act="clear"]').hidden = !picker.optional;
-  q('[data-el="hint"]').textContent = picker.mode === 'h' ? 'Vyberte hodinu' : 'Vyberte minuty';
+  q('[data-el="hint"]').textContent = t(picker.mode === 'h' ? 'time.pickHour' : 'time.pickMinute');
+  q('[data-act="now"]').textContent = t('common.now');
+  q('[data-act="clear"]').textContent = t('time.clear');
+  q('[data-act="cancel"]').textContent = t('common.cancel');
 
   const grid = q('[data-el="grid"]');
   const values = picker.mode === 'h'
@@ -133,7 +139,8 @@ function commit(value) {
   input.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-function openPicker(input, label, optional) {
+function openPicker(input, optional) {
+  const label = labelOf(input);
   if (!dlg) buildDialog();
   const value = valueDesc.get.call(input);
   let [h, m] = value ? value.split(':').map(Number) : [NaN, NaN];
@@ -152,9 +159,20 @@ function openPicker(input, label, optional) {
 // ---------------------------------------------------------------------------
 // Nahrazení inputů
 // ---------------------------------------------------------------------------
+/** Popisek pole z <label> (čte se vždy znovu, aby odpovídal aktuálnímu jazyku). */
+const labelOf = (input) => input.closest('label')?.querySelector('span')?.textContent?.trim() || t('field.time');
+
+/** Obnoví texty všech nahrazených polí (např. po změně jazyka). */
+const syncs = new Map(); // input → sync
+export function refreshTimeInputs() {
+  for (const [input, sync] of syncs) {
+    if (input.isConnected) sync();
+    else syncs.delete(input);
+  }
+}
+
 function enhance(input) {
   const optional = input.hasAttribute('data-optional');
-  const label = input.closest('label')?.querySelector('span')?.textContent?.trim() ?? 'Čas';
 
   const field = document.createElement('button');
   field.type = 'button';
@@ -169,10 +187,12 @@ function enhance(input) {
 
   const sync = () => {
     const v = valueDesc.get.call(input);
-    text.textContent = v || input.dataset.emptyLabel || '--:--';
+    const empty = input.dataset.emptyLabelKey ? t(input.dataset.emptyLabelKey) : input.dataset.emptyLabel;
+    text.textContent = v || empty || '--:--';
     text.classList.toggle('text-slate-400', !v);
-    field.setAttribute('aria-label', `${label}: ${v || 'nezadáno'}`);
+    field.setAttribute('aria-label', `${labelOf(input)}: ${v || t('time.notSet')}`);
   };
+  syncs.set(input, sync);
 
   // Programové nastavení .value aktualizuje i zobrazení.
   Object.defineProperty(input, 'value', {
@@ -182,7 +202,7 @@ function enhance(input) {
 
   field.addEventListener('click', (e) => {
     e.preventDefault(); // tlačítko uvnitř <label> by jinak klik zdvojilo
-    openPicker(input, label, optional);
+    openPicker(input, optional);
   });
   sync();
 }
