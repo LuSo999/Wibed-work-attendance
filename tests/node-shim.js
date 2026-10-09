@@ -39,6 +39,9 @@ const assert = {
   equal(actual, expected, msg) {
     if (!Object.is(actual, expected)) fail(msg, `${JSON.stringify(actual)} !== ${JSON.stringify(expected)}`);
   },
+  notEqual(actual, expected, msg) {
+    if (Object.is(actual, expected)) fail(msg, `${JSON.stringify(actual)} === ${JSON.stringify(expected)}`);
+  },
   deepEqual(actual, expected, msg) {
     if (!deepEqual(actual, expected)) fail(msg, `${JSON.stringify(actual)} neodpovídá ${JSON.stringify(expected)}`);
   },
