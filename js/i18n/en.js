@@ -519,6 +519,9 @@ export default {
   'progress.worked': 'Worked {worked} / {goal} h',
   'progress.remaining': '{time} to departure',
   'progress.over': '{time} past the planned departure',
+  'progress.breakPending': 'A {minutes} break is deducted after {after} of stay (at {time})',
+  'progress.breakPendingNoTime': 'A {minutes} break is deducted after {after} of stay',
+  'progress.breakIncluded': 'including a {minutes} break',
 
   // Sync status
   'sync.saved': 'Saved',

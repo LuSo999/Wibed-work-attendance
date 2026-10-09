@@ -818,19 +818,52 @@ export function bankZeroing({
 }
 
 /**
- * Postup dne ke fondu: odpracováno od příchodu do teď (po odečtení přestávky),
- * podíl z cíle (fond − nepřítomnost) a zbývající čas do plánovaného odchodu.
- * @param {object} p { date, settings, arrival 'HH:MM', now (minuty od půlnoci), absenceMinutes, leave 'HH:MM'|null }
- * @returns {{worked, goal, percent, remaining: number|null}} remaining < 0 = po plánovaném odchodu
+ * Postup dne ke fondu.
+ *
+ * - worked: odpracováno od příchodu do teď podle pravidla přestávky (na hranici intervalu
+ *   se přestávka odečte celá, číslo proto skočí dolů),
+ * - percent (ukazatel): je-li znám plánovaný odchod, podíl uplynulého pobytu z plánovaného
+ *   pobytu (odchod − příchod), 0–100 – s časem nikdy neklesá; jinak worked / goal, ale nejméně
+ *   minPercent (volající předá poslední vykreslenou hodnotu stejného dne, aby ukazatel neklesl),
+ * - breakNote: zpráva {key, params} o přestávce – před jejím odečtením kdy se odečte, potom kolik
+ *   je v čísle započteno (null, pokud pravidlo přestávku nemá),
+ * - remaining: minuty do plánovaného odchodu (záporné = po něm).
+ *
+ * @param {object} p { date, settings, arrival 'HH:MM', now (minuty od půlnoci), absenceMinutes,
+ *   leave 'HH:MM'|null, minPercent }
  */
-export function dayProgress({ date, settings, arrival, now, absenceMinutes = 0, leave = null }) {
+export function dayProgress({
+  date, settings, arrival, now, absenceMinutes = 0, leave = null, minPercent = 0,
+}) {
   const rules = rulesForDate(rulesFromSettings(normalizeSettings(settings)), date);
   const arr = parseTime(arrival);
-  const worked = arr === null ? 0 : workedForStay(Math.max(0, now - arr), rules);
-  const goal = Math.max(0, dayFund(date, rules) - absenceMinutes);
-  const percent = goal > 0 ? Math.min(100, Math.round((worked / goal) * 100)) : 100;
   const lv = leave ? parseTime(leave) : null;
-  return { worked, goal, percent, remaining: lv === null ? null : lv - now };
+  const goal = Math.max(0, dayFund(date, rules) - absenceMinutes);
+  const remaining = lv === null ? null : lv - now;
+  if (arr === null) return { worked: 0, goal, percent: 0, remaining, breakNote: null };
+
+  // příchod „v budoucnu“ (např. po půlnoci) = zatím žádný pobyt
+  const stay = Math.max(0, now - arr);
+  const worked = workedForStay(stay, rules);
+  const clamp = (v) => Math.min(100, Math.max(0, Math.round(v)));
+  const percent = lv !== null && lv > arr
+    ? clamp((stay / (lv - arr)) * 100)
+    : Math.max(clamp(goal > 0 ? (worked / goal) * 100 : 100), Math.min(100, minPercent));
+
+  let breakNote = null;
+  if (rules.BREAK_MIN > 0 && rules.BREAK_INTERVAL_MIN > 0) {
+    const deducted = breakMinutes(stay, rules);
+    if (deducted > 0) {
+      breakNote = msg('progress.breakIncluded', { minutes: formatMinutes(deducted) });
+    } else {
+      const at = arr + rules.BREAK_INTERVAL_MIN;
+      const params = { minutes: formatMinutes(rules.BREAK_MIN), after: formatMinutes(rules.BREAK_INTERVAL_MIN) };
+      breakNote = at <= 1439
+        ? msg('progress.breakPending', { ...params, time: toTimeString(at) })
+        : msg('progress.breakPendingNoTime', params);
+    }
+  }
+  return { worked, goal, percent, remaining, breakNote };
 }
 
 // ---------------------------------------------------------------------------

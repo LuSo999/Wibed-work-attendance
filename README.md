@@ -238,8 +238,14 @@ link back to today is shown above the buttons.
 - on a day with a fixed departure, "Bank after the planned departure: ±H:MM" is shown as well,
 - crossing the bounds (core time, latest departure) is only a warning.
 
-**Day progress** (`dayProgress`): worked time from the arrival until now (minus the break) out of the goal of daily hours − absence and a
-countdown to the planned departure; refreshed every 30 s.
+**Day progress** (`dayProgress`), refreshed every 30 s:
+
+- **The bar** shows the elapsed stay out of the planned stay (planned departure − arrival), 0–100 %, and never goes down over time.
+  Without a planned departure it shows worked / goal and never drops below the last shown value of the same day.
+- **The text "Worked X / Y"** follows the break rule from the settings, so at the interval boundary (6 h of stay by default) it drops by the
+  break length. Below it a small note says, until the break is deducted, "A 0:30 break is deducted after 6:00 of stay (at 12:00)",
+  afterwards "including a 0:30 break" (values follow the configured rule).
+- **"to departure"** is the countdown to the planned departure.
 
 **Undo:** the confirmation of a record is a small notice at the bottom (takes no space) with an **Undo** link that disappears after 8 s.
 Undo restores the previous state of the day (or deletes the record if there was none).

@@ -531,6 +531,9 @@ export default {
   'progress.worked': 'Odpracováno {worked} / {goal} h',
   'progress.remaining': 'do odchodu {time}',
   'progress.over': 'po plánovaném odchodu o {time}',
+  'progress.breakPending': 'Přestávka {minutes} se odečte po {after} pobytu (v {time})',
+  'progress.breakPendingNoTime': 'Přestávka {minutes} se odečte po {after} pobytu',
+  'progress.breakIncluded': 'včetně přestávky {minutes}',
 
   // Stav synchronizace
   'sync.saved': 'Uloženo',

@@ -237,8 +237,14 @@ nepřítomnost, poznámka) je pod **Více**. Při zápisu pro jiné datum než d
 - v den s pevným odchodem se navíc ukáže „Banka po plánovaném odchodu: ±H:MM“,
 - překročení hranic (pevná doba, nejpozdější odchod) je jen upozornění.
 
-**Postup dne** (`dayProgress`): odpracováno od příchodu do teď (po odečtení přestávky) z cíle fond − nepřítomnost a odpočet do
-plánovaného odchodu; obnovuje se každých 30 s.
+**Postup dne** (`dayProgress`), obnovuje se každých 30 s:
+
+- **Ukazatel** ukazuje uplynulý pobyt z plánovaného pobytu (plánovaný odchod − příchod), 0–100 %, a s časem nikdy neklesá.
+  Bez plánovaného odchodu ukazuje odpracováno / cíl a v rámci dne neklesne pod naposledy zobrazenou hodnotu.
+- **Text „Odpracováno X / Y“** počítá podle pravidla přestávky z nastavení, takže na hranici intervalu (výchozí 6 h pobytu) klesne
+  o délku přestávky. Pod ním je malá poznámka: dokud se přestávka neodečetla, „Přestávka 0:30 se odečte po 6:00 pobytu (v 12:00)“,
+  potom „včetně přestávky 0:30“ (hodnoty podle nastaveného pravidla).
+- **„Do odchodu“** je odpočet do plánovaného odchodu.
 
 **Zpět:** potvrzení zápisu je malé oznámení dole (nezabírá místo) s odkazem **Zpět**, které po 8 s zmizí. Zpět vrátí předchozí stav dne
 (nebo záznam smaže, pokud předtím neexistoval).

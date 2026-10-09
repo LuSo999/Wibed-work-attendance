@@ -703,6 +703,8 @@ function renderZeroing(d) {
 }
 
 /** Postup dne ke fondu a odpočet do plánovaného odchodu (jen po příchodu, před odchodem). */
+let lastProgress = { date: null, percent: 0 }; // ukazatel bez plánovaného odchodu v rámci dne neklesá
+
 function renderProgress(d) {
   const box = $('#today-progress');
   const today = todayStr();
@@ -712,10 +714,18 @@ function renderProgress(d) {
     return;
   }
   const p = dayProgress({
-    date: today, settings: state.settings, arrival: rec.arrival, now: parseTime(nowTime()), absenceMinutes: d.absence ?? 0, leave: d.plannedLeave,
+    date: today,
+    settings: state.settings,
+    arrival: rec.arrival,
+    now: parseTime(nowTime()),
+    absenceMinutes: d.absence ?? 0,
+    leave: d.plannedLeave,
+    minPercent: lastProgress.date === today ? lastProgress.percent : 0,
   });
+  lastProgress = { date: today, percent: p.percent };
   box.hidden = false;
   $('#today-progress-text').textContent = t('progress.worked', { worked: formatMinutes(p.worked), goal: formatMinutes(p.goal) });
+  setError($('#today-progress-break'), p.breakNote ? tr(p.breakNote) : null);
   $('#today-countdown').textContent = p.remaining === null ? ''
     : p.remaining >= 0 ? t('progress.remaining', { time: formatMinutes(p.remaining) })
       : t('progress.over', { time: formatMinutes(-p.remaining) });

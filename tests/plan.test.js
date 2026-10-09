@@ -728,16 +728,73 @@ test('vynulování banky: chybějící příchod a odhad podle plánu', () => {
   assert.equal(sat.leave, '09:00');
 });
 
-test('postup dne ke fondu a odpočet do odchodu', () => {
-  const p = dayProgress({ date: '2027-02-01', settings: settings(), arrival: '06:00', now: 9 * H, leave: '14:30' });
-  assert.deepEqual(p, { worked: 3 * H, goal: 8 * H, percent: 38, remaining: 5.5 * H });
-  // po 6 h pobytu se odečte přestávka; po plánovaném odchodu je odpočet záporný
-  assert.equal(dayProgress({ date: '2027-02-01', settings: settings(), arrival: '06:00', now: 12 * H }).worked, 5.5 * H);
-  const late = dayProgress({ date: '2027-02-01', settings: settings(), arrival: '06:00', now: 15 * H, leave: '14:30' });
+const progress = (patch) => dayProgress({ date: '2027-02-01', settings: settings(), arrival: '06:00', leave: '14:30', ...patch });
+
+test('postup dne: na hranici přestávky klesne odpracováno, ukazatel ne', () => {
+  const before = progress({ now: 11 * H + 59 });            // pobyt 5:59
+  const at = progress({ now: 12 * H });                     // pobyt 6:00
+  const after = progress({ now: 12 * H + 1 });              // pobyt 6:01
+  assert.deepEqual([before.worked, at.worked, after.worked], [359, 330, 331]);
+  // ukazatel = uplynulý pobyt / plánovaný pobyt 06:00–14:30 (8:30)
+  assert.deepEqual([before.percent, at.percent, after.percent], [70, 71, 71]);
+  assert.ok(before.percent <= at.percent && at.percent <= after.percent);
+  assert.equal(before.goal, 8 * H);
+  assert.equal(at.remaining, 2.5 * H);
+  // poznámka o přestávce: před odečtením kdy, potom kolik je započteno
+  assert.deepEqual(before.breakNote, { key: 'progress.breakPending', params: { minutes: '0:30', after: '6:00', time: '12:00' } });
+  assert.deepEqual(at.breakNote, { key: 'progress.breakIncluded', params: { minutes: '0:30' } });
+  // po plánovaném odchodu 100 % a záporný odpočet
+  const late = progress({ now: 15 * H });
   assert.equal(late.percent, 100);
   assert.equal(late.remaining, -30);
-  // částečná nepřítomnost zmenší cíl
-  assert.equal(dayProgress({ date: '2027-02-01', settings: settings(), arrival: '06:00', now: 9 * H, absenceMinutes: 2 * H }).goal, 6 * H);
+  // ukazatel s plánovaným odchodem v průběhu dne nikdy neklesá
+  let last = 0;
+  for (let now = 6 * H; now <= 15 * H; now += 1) {
+    const { percent } = progress({ now });
+    assert.ok(percent >= last, `now=${now}`);
+    last = percent;
+  }
+});
+
+test('postup dne: jiné pravidlo přestávky (15 min po 4:30 h)', () => {
+  const s = settings({ breakAfterHours: 4.5, breakLengthMinutes: 15 });
+  const p = (now) => dayProgress({ date: '2027-02-01', settings: s, arrival: '06:00', leave: '14:15', now });
+  assert.equal(p(10 * H + 29).worked, 269);
+  assert.equal(p(10 * H + 30).worked, 255);
+  assert.deepEqual([p(10 * H + 29).percent, p(10 * H + 30).percent], [54, 55]);
+  assert.deepEqual(p(10 * H + 29).breakNote, { key: 'progress.breakPending', params: { minutes: '0:15', after: '4:30', time: '10:30' } });
+  assert.deepEqual(p(10 * H + 30).breakNote, { key: 'progress.breakIncluded', params: { minutes: '0:15' } });
+  // bez přestávky žádná poznámka
+  assert.equal(dayProgress({ date: '2027-02-01', settings: settings({ breakLengthMinutes: 0 }), arrival: '06:00', now: 13 * H }).breakNote, null);
+});
+
+test('postup dne: částečná nepřítomnost a den bez plánovaného odchodu', () => {
+  // lékař 2 h → cíl 6 h; bez plánovaného odchodu se počítá odpracováno / cíl
+  const doc = progress({ leave: null, now: 9 * H, absenceMinutes: 2 * H });
+  assert.equal(doc.goal, 6 * H);
+  assert.equal(doc.percent, 50);
+  assert.equal(doc.remaining, null);
+  // bez plánovaného odchodu: na hranici přestávky by podíl klesl (75 → 69 %),
+  // předaná předchozí hodnota stejného dne ho udrží
+  const first = progress({ leave: null, now: 11 * H + 59 });
+  assert.equal(first.percent, 75);
+  assert.equal(progress({ leave: null, now: 12 * H }).percent, 69);
+  assert.equal(progress({ leave: null, now: 12 * H, minPercent: first.percent }).percent, 75);
+  assert.equal(progress({ leave: null, now: 13 * H, minPercent: first.percent }).percent, 81); // dál roste
+  // neplatný plánovaný odchod (před příchodem) → jako bez odchodu
+  assert.equal(progress({ leave: '05:00', now: 9 * H }).percent, 38);
+});
+
+test('postup dne: příchod po půlnoci nebo neplatný', () => {
+  const bad = progress({ arrival: '25:00', now: 9 * H });
+  assert.deepEqual([bad.worked, bad.percent, bad.breakNote], [0, 0, null]);
+  assert.equal(progress({ arrival: null, now: 9 * H }).percent, 0);
+  // příchod později než „teď“ (např. 23:50 a teď 00:10) → zatím nulový pobyt
+  const night = progress({ arrival: '23:50', leave: null, now: 10 });
+  assert.deepEqual([night.worked, night.percent], [0, 0]);
+  // přestávka by připadla až po půlnoci → poznámka bez času
+  assert.deepEqual(progress({ arrival: '20:00', leave: null, now: 21 * H }).breakNote,
+    { key: 'progress.breakPendingNoTime', params: { minutes: '0:30', after: '6:00' } });
 });
 
 // ---------------------------------------------------------------------------
