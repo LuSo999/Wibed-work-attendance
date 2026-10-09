@@ -8,7 +8,7 @@ import {
   weekParity, scheduledLeave, workedForStay, stayForWorked, buildMonthPlan, fillRecord, fillCandidates,
   rulesFromSettings, switchAnchorMode, timeWarnings, validateOverride, bulkClearFixed, isEmptyOverride,
   applyRuleChange, ruleChangeImpact, isRuleChange, mergeClearFixed, RULES_SINCE_EVER, holidayChangeImpact,
-  CORE_WARNING_KEYS,
+  CORE_WARNING_KEYS, canEditOverride,
 } from '../js/plan.js';
 import {
   dayResult, monthFund, configureHolidays, holidaysEnabled,
@@ -637,4 +637,17 @@ test('dopad vypnutí svátků na banku a uzavřené dny (konfigurace se vrátí)
   } finally {
     configureHolidays({ enabled: true });
   }
+});
+
+test('výjimku lze nastavit jen dnešnímu a budoucímu pracovnímu dni bez uzavřené docházky', () => {
+  const p = plan({ today: '2027-02-03', records: [work('2027-02-01', '06:00', '14:30'), work('2027-02-04', '06:00', '14:30')] });
+  assert.equal(canEditOverride(day(p, '2027-02-02'), '2027-02-03'), false); // proběhlý den → docházka
+  assert.equal(canEditOverride(day(p, '2027-02-03'), '2027-02-03'), true);  // dnešek
+  assert.equal(canEditOverride(day(p, '2027-02-05'), '2027-02-03'), true);  // budoucí den
+  assert.equal(canEditOverride(day(p, '2027-02-04'), '2027-02-03'), false); // předem uzavřený den
+  assert.equal(canEditOverride(day(p, '2027-02-06'), '2027-02-03'), false); // sobota
+  // dnešek s rozpracovaným záznamem (jen příchod) zůstává editovatelný
+  const p2 = plan({ today: '2027-02-03', records: [work('2027-02-03', '06:10', null)] });
+  assert.equal(canEditOverride(day(p2, '2027-02-03'), '2027-02-03'), true);
+  assert.equal(canEditOverride(undefined, '2027-02-03'), false);
 });

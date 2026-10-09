@@ -190,7 +190,7 @@ u budoucích plánované (kurzívou, tlumeně).
 
 **Výjimky dnů:** klepnutím na dnešní nebo budoucí den v plánu nastavíte nepřítomnost (celý den nebo hodiny), pevný příchod či odchod,
 pevné hodiny práce, poznámku k plánu, nebo **zrušíte pevný čas z rozvrhu** pro ten den (zvlášť příchod a odchod). Proběhlé dny
-výjimku nemají – upravuje se jejich docházka.
+(a dnešek s už uzavřenou docházkou) výjimku nemají – upravuje se jejich docházka (`canEditOverride` v `plan.js`).
 
 - Priorita konců dne: skutečný příchod > výjimka (`arriveAt`/`leaveAt`) > rozvrh (pokud ho `clearFixed` nezrušil) > kotva.
   `clearFixed` ruší jen časy z rozvrhu, ne kotvu. Den se zrušeným pevným časem se stane běžným a podílí se na rozložení deficitu

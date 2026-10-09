@@ -7,7 +7,7 @@ import {
   CORE_WARNING_KEYS, buildMonthPlan, fillCandidates, isoWeek,
   weekParity, normalizeSettings, settingsWarnings, workedForStay, stayForWorked,
   rulesFromSettings, switchAnchorMode, validateOverride, isEmptyOverride, bulkClearFixed, scheduledDay,
-  applyRuleChange, isRuleChange, ruleChangeImpact, holidayChangeImpact, RULES_SINCE_EVER, NOTE_MAX,
+  applyRuleChange, isRuleChange, ruleChangeImpact, holidayChangeImpact, RULES_SINCE_EVER, NOTE_MAX, canEditOverride,
 } from './plan.js';
 import { enhanceTimeInputs } from './time24.js';
 import {
@@ -709,7 +709,7 @@ export function initPlanView(context) {
     if (!row) return;
     const date = row.dataset.planDate;
     const d = currentPlan().days.find((x) => x.date === date);
-    if (date >= todayStr() && d.workday && !(d.record && d.plannedWorked === null)) openOverrideDialog(date);
+    if (canEditOverride(d, todayStr())) openOverrideDialog(date);
     else ctx.openDayDialog(date);
   });
 

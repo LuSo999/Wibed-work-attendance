@@ -455,6 +455,14 @@ export function validateOverride(ov, settings) {
   return { error: null, warnings };
 }
 
+/**
+ * Lze den v plánu upravit výjimkou? Jen dnešní a budoucí pracovní den bez uzavřené docházky;
+ * proběhlé dny (a uzavřený dnešek) se upravují v docházce.
+ */
+export function canEditOverride(day, today) {
+  return Boolean(day) && day.date >= today && day.workday && day.plannedWorked !== null;
+}
+
 /** Je výjimka prázdná (nic nemění)? Takovou je lepší smazat. */
 export function isEmptyOverride(ov) {
   return !ov.absenceType && !ov.arriveAt && !ov.leaveAt && (ov.workedHours == null || ov.workedHours === '')

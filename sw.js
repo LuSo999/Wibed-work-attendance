@@ -2,7 +2,7 @@
 // - vlastní soubory: network-first (online vždy aktuální verze, offline z cache)
 // - CDN (Tailwind, Firebase SDK – pevné verze v URL): cache-first
 // - Firestore / Auth API: neřeší se, offline data obsluhuje Firestore SDK samo
-const VERSION = 'v7';
+const VERSION = 'v8';
 const CACHE = `dochazka-${VERSION}`;
 
 const SHELL = [

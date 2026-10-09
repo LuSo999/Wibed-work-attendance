@@ -190,7 +190,7 @@ future days planned ones (italic, muted).
 
 **Day exceptions:** tap today or a future day in the plan to set an absence (whole day or hours), a fixed arrival or departure,
 fixed working hours, a plan note, or to **clear a fixed time from the schedule** for that day (arrival and departure separately). Past days
-have no exceptions – their attendance is edited instead.
+(and today once its attendance is closed) have no exceptions – their attendance is edited instead (`canEditOverride` in `plan.js`).
 
 - End priority: actual arrival > exception (`arriveAt`/`leaveAt`) > schedule (unless cleared by `clearFixed`) > anchor.
   `clearFixed` only clears schedule times, not the anchor. A day with a cleared fixed time becomes regular and takes part in the deficit distribution
