@@ -297,6 +297,7 @@
             <button id="btn-plan-today" type="button" class="rounded-lg px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-white dark:text-indigo-400 dark:hover:bg-slate-900" data-i18n="common.currentMonth"></button>
             <button id="btn-bulk-fill" type="button" class="rounded-lg bg-teal-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-teal-700" hidden></button>
             <button id="btn-bulk-clear" type="button" class="rounded-lg bg-white px-3 py-1.5 text-sm font-medium shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:ring-slate-800 dark:hover:bg-slate-800" data-i18n="plan.bulkClear"></button>
+            <button id="btn-bulk-relax" type="button" class="rounded-lg bg-white px-3 py-1.5 text-sm font-medium shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 dark:bg-slate-900 dark:ring-slate-800 dark:hover:bg-slate-800" data-i18n="plan.bulkRelax"></button>
           </div>
         </div>
         <div id="bulk-undo" class="flex flex-wrap items-center gap-3 rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white dark:bg-white dark:text-slate-900" hidden>
@@ -309,6 +310,14 @@
           <button id="btn-plan-summary-more" type="button" class="mt-1 text-xs font-medium text-indigo-600 md:hidden dark:text-indigo-400" aria-expanded="false" aria-controls="plan-summary-extra"></button>
           <div id="plan-summary-extra" class="mt-2 hidden grid-cols-3 gap-2 md:grid"></div>
         </div>
+        <div id="plan-relax-hint" class="rounded-2xl bg-white p-4 text-sm shadow-sm ring-2 ring-amber-400 dark:bg-slate-900 dark:ring-amber-600" role="status" hidden>
+          <p id="plan-relax-title" class="font-semibold"></p>
+          <p id="plan-relax-text" class="mt-1 text-slate-600 dark:text-slate-300"></p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button id="btn-relax-apply" type="button" class="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700" data-i18n="relax.apply"></button>
+            <button id="btn-relax-keep" type="button" class="rounded-xl px-4 py-2 text-sm font-medium ring-1 ring-slate-300 hover:bg-slate-100 dark:ring-slate-700 dark:hover:bg-slate-800" data-i18n="relax.keep"></button>
+          </div>
+        </div>
         <ul id="plan-warnings" class="space-y-1 rounded-2xl bg-amber-50 p-4 text-sm font-medium text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900" hidden></ul>
         <div class="flex flex-wrap gap-1.5 text-[11px] font-medium">
           <span class="rounded-full bg-slate-100 px-2 py-0.5 text-slate-700 dark:bg-slate-800 dark:text-slate-300" data-i18n="legend.done"></span>
@@ -320,6 +329,8 @@
           <span class="rounded-full bg-rose-100 px-2 py-0.5 text-rose-800 dark:bg-rose-900/60 dark:text-rose-200" data-i18n="legend.missing"></span>
           <span class="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200" data-i18n="legend.note"></span>
           <span class="rounded-full bg-slate-200 px-2 py-0.5 text-slate-700 dark:bg-slate-700 dark:text-slate-200" data-i18n="legend.cleared"></span>
+          <span class="rounded-full bg-orange-100 px-2 py-0.5 text-orange-800 dark:bg-orange-900/60 dark:text-orange-200" data-i18n="tag.relaxed"></span>
+          <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200" data-i18n="tag.anchorOff"></span>
         </div>
         <div class="overflow-x-auto rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
           <table id="plan-table" class="w-full text-[12.5px] sm:text-[13px]">
@@ -421,6 +432,13 @@
                   <input name="anchorTime" type="time" data-time24 class="tabular w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
               </div>
               <p id="anchor-hint" class="mt-1 text-xs text-slate-500 dark:text-slate-400"></p>
+              <label class="mt-3 block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.anchorStrength"></span>
+                <select name="anchorStrength" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                  <option value="hard" data-i18n="anchorStrength.hard"></option>
+                  <option value="soft" data-i18n="anchorStrength.soft"></option>
+                  <option value="off" data-i18n="anchorStrength.off"></option>
+                </select></label>
+              <p id="anchor-strength-hint" class="mt-1 text-xs text-slate-500 dark:text-slate-400"></p>
             </div>
             <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.earliest"></span>
               <input name="earliestArrival" type="time" data-time24 class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
@@ -567,6 +585,15 @@
           <span><span data-i18n="ov.clearLeave"></span> <span id="ov-clear-leave-time" class="text-slate-500 dark:text-slate-400"></span></span>
         </label>
         <label class="col-span-2 block">
+          <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="ov.anchorStrength"></span>
+          <select name="anchorStrength" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+            <option value="" data-i18n="ov.anchorStrengthNone"></option>
+            <option value="soft" data-i18n="anchorStrength.soft"></option>
+            <option value="off" data-i18n="anchorStrength.off"></option>
+          </select>
+          <span id="ov-anchor-hint" class="mt-1 block text-xs text-slate-500 dark:text-slate-400"></span>
+        </label>
+        <label class="col-span-2 block">
           <span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="ov.workedHours"></span>
           <input name="workedHours" type="number" min="0" max="24" step="0.25" inputmode="decimal" data-i18n-attr="placeholder:ov.compute" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
         </label>
@@ -619,6 +646,29 @@
       <div class="mt-5 flex justify-end gap-2">
         <button value="cancel" formnovalidate class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="common.close"></button>
         <button id="bulk-clear-ok" value="ok" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50" data-i18n="bulk.ok"></button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ===== Hromadné uvolnění kotvy ===== -->
+  <dialog id="dlg-bulk-relax" class="w-[calc(100%-2rem)] max-w-md rounded-2xl bg-white p-0 text-slate-900 shadow-xl dark:bg-slate-900 dark:text-slate-100">
+    <form id="form-bulk-relax" method="dialog" class="p-5" novalidate>
+      <h2 class="text-lg font-bold" data-i18n="bulkRelax.title"></h2>
+      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400" data-i18n="bulkRelax.intro"></p>
+      <div class="mt-4 grid grid-cols-2 gap-3">
+        <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="bulk.from"></span><input name="from" type="date" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+        <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="bulk.to"></span><input name="to" type="date" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+        <label class="col-span-2 block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.anchorStrength"></span>
+          <select name="strength" class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+            <option value="soft" data-i18n="anchorStrength.soft"></option>
+            <option value="off" data-i18n="anchorStrength.off"></option>
+          </select></label>
+      </div>
+      <p id="bulk-relax-hint" class="mt-2 text-xs text-slate-500 dark:text-slate-400"></p>
+      <p id="bulk-relax-preview" class="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300"></p>
+      <div class="mt-5 flex justify-end gap-2">
+        <button value="cancel" formnovalidate class="rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800" data-i18n="common.close"></button>
+        <button id="bulk-relax-ok" value="ok" class="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50" data-i18n="bulkRelax.ok"></button>
       </div>
     </form>
   </dialog>

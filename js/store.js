@@ -104,9 +104,9 @@ export function saveAppSettings(uid, patch) {
   return setDoc(appSettingsDoc(uid), { ...patch, updatedAt: serverTimestamp() }, { merge: true });
 }
 
-/** Data výjimky dne pro Firestore (poznámka max. 200 znaků, clearFixed jen platné hodnoty). */
+/** Data výjimky dne pro Firestore (poznámka max. 200 znaků, clearFixed a anchorStrength jen platné hodnoty). */
 function overrideData({
-  absenceType, absenceHours, arriveAt, leaveAt, workedHours, clearFixed, note,
+  absenceType, absenceHours, arriveAt, leaveAt, workedHours, clearFixed, anchorStrength, note,
 }) {
   return {
     absenceType: absenceType || null,
@@ -115,6 +115,8 @@ function overrideData({
     leaveAt: leaveAt || null,
     workedHours: hoursOrNull(workedHours),
     clearFixed: ['arrival', 'leave', 'both'].includes(clearFixed) ? clearFixed : null,
+    // uvolnění kotvy pro den ('soft' = kolem, 'off' = vypnuto); má přednost před nastavením
+    anchorStrength: ['soft', 'off'].includes(anchorStrength) ? anchorStrength : null,
     note: (note ?? '').trim().slice(0, 200),
     updatedAt: serverTimestamp(),
   };

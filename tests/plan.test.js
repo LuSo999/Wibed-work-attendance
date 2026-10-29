@@ -9,6 +9,7 @@ import {
   rulesFromSettings, switchAnchorMode, timeWarnings, validateOverride, bulkClearFixed, isEmptyOverride,
   applyRuleChange, ruleChangeImpact, isRuleChange, mergeClearFixed, RULES_SINCE_EVER, holidayChangeImpact,
   CORE_WARNING_KEYS, canEditOverride, bankZeroing, dayProgress, SETTINGS_EXAMPLES, applyExample, samplePlan,
+  bulkRelaxAnchor, anchorRelaxSuggestion,
 } from '../js/plan.js';
 import {
   dayResult, monthFund, configureHolidays, holidaysEnabled,
@@ -820,4 +821,166 @@ test('příklady průvodce: předvyplní kotvu a rozvrh, měsíc vyjde do fondu,
   // neznámý příklad nic nemění
   assert.equal(applyExample(base, 'nic').anchorTime, base.anchorTime);
   assert.ok(Object.keys(SETTINGS_EXAMPLES).length === 3);
+});
+
+// ---------------------------------------------------------------------------
+// Pevnost kotvy: hard / soft (kolem) / off (vypnuto)
+// ---------------------------------------------------------------------------
+// 10 proběhlých dnů po 10:00 → přebytek 20:00 na zbývajících 10 dnů (od 15. 2.)
+const SURPLUS = ['2027-02-01', '2027-02-02', '2027-02-03', '2027-02-04', '2027-02-05', '2027-02-08', '2027-02-09', '2027-02-10', '2027-02-11', '2027-02-12']
+  .map((date) => work(date, '06:00', '16:30'));
+const MID = { today: '2027-02-15', records: SURPLUS };
+
+test('pevnost kotvy: nastavení bez pole je pevná kotva, neplatná hodnota taky', () => {
+  assert.equal(normalizeSettings({}).anchorStrength, 'hard');
+  assert.equal(normalizeSettings({ anchorStrength: 'nesmysl' }).anchorStrength, 'hard');
+  assert.equal(normalizeSettings({ anchorStrength: 'soft' }).anchorStrength, 'soft');
+  // stará data bez pole: plán stejný jako s 'hard'
+  const legacy = buildMonthPlan({ year: 2027, month: 2, ...MID, settings: { anchorTime: '06:00' } });
+  assert.deepEqual(legacy.summary, plan({ ...MID, anchorStrength: 'hard' }).summary);
+});
+
+test('přebytek: hard nevyrovná, soft a off vyrovnají pozdějším příchodem', () => {
+  const hard = plan(MID);
+  assert.equal(hard.summary.unbalanced, -15 * H);
+  assert.ok(regularDays(hard).every((d) => d.arrival === '06:00' && d.plannedLeave === '14:00' && !d.relaxed));
+  const soft = plan({ ...MID, anchorStrength: 'soft' });
+  assert.equal(soft.summary.unbalanced, 0);
+  assert.equal(soft.summary.deviation, 0);
+  // celá povinná doba 09:00–14:00 zůstává, příchod se posune později (nejpozději 09:00)
+  assert.ok(regularDays(soft).every((d) => d.relaxed && d.plannedLeave === '14:00' && d.arrival === '07:30' && d.plannedWorked === 6 * H));
+  assert.deepEqual(soft.warnings, []);
+  const off = plan({ ...MID, anchorStrength: 'off' });
+  assert.equal(off.summary.unbalanced, 0);
+  assert.ok(regularDays(off).every((d) => d.window && d.arrival === null && d.plannedLeave === null && d.plannedWorked === 6 * H));
+  assert.deepEqual(regularDays(off)[0].window, { arriveBy: '09:00', leaveFrom: '14:00' });
+});
+
+test('soft: v 1. průchodu se kotva nehýbe, když stačí druhý konec', () => {
+  const p = plan({ anchorStrength: 'soft', schedule: { odd: { 1: '14:00', 3: '14:00' } } });
+  assert.equal(p.summary.unbalanced, 0);
+  assert.ok(regularDays(p).every((d) => !d.relaxed && d.arrival === '06:00'));
+});
+
+test('nedostatek při soft: příchod dřív až do nejdřívějšího příchodu', () => {
+  // nejpozdější odchod 15:00 → běžný den 06:00–15:00 = 8:30; 2. průchod posune příchod dřív (nejdříve 05:00)
+  const hard = plan({ today: '2027-02-15', latestDeparture: '15:00' });
+  assert.ok(hard.summary.unbalanced > 0);
+  const soft = plan({ today: '2027-02-15', latestDeparture: '15:00', anchorStrength: 'soft' });
+  const reg = regularDays(soft);
+  assert.ok(reg.every((d) => d.relaxed && d.plannedLeave === '15:00' && d.arrival === '05:00' && d.plannedWorked === 9.5 * H));
+  assert.equal(soft.summary.unbalanced, hard.summary.unbalanced - 10 * H);
+});
+
+test('off: hodiny v mezích povinné doby, maxima a hranic', () => {
+  // velký nedostatek: strop je max. 10 h práce
+  const short = plan({ today: '2027-02-15', anchorStrength: 'off' });
+  assert.ok(regularDays(short).every((d) => d.plannedWorked === 10 * H));
+  // přebytek: nejméně celá povinná doba 09:00–14:00 = 5:00 (bez přestávky)
+  const huge = SURPLUS.map((r) => ({ ...r, departure: '20:00' }));
+  const surplus = plan({ today: '2027-02-15', records: huge, anchorStrength: 'off' });
+  assert.ok(regularDays(surplus).every((d) => d.plannedWorked === 5 * H));
+  assert.ok(surplus.summary.unbalanced < 0);
+  // úzké okno hranic omezí maximum: 06:00–14:00 = 7:30
+  const narrow = plan({ today: '2027-02-15', anchorStrength: 'off', earliestArrival: '06:00', latestDeparture: '14:00' });
+  assert.ok(regularDays(narrow).every((d) => d.plannedWorked === 7.5 * H));
+});
+
+test('minimální délka dne: přestávka na hranici 6 h pobytu', () => {
+  // povinná doba 08:00–14:00 = 6:00 pobytu → po odečtení přestávky 5:30 (ne 6:00)
+  const huge = SURPLUS.map((r) => ({ ...r, departure: '20:00' }));
+  const off = plan({ today: '2027-02-15', records: huge, anchorStrength: 'off', coreStart: '08:00' });
+  assert.ok(regularDays(off).every((d) => d.plannedWorked === 5.5 * H));
+  // soft: den 5:30 práce musí pokrýt 08:00–14:00 → příchod 08:00 (ne 08:30)
+  const soft = plan({ today: '2027-02-15', records: huge, anchorStrength: 'soft', coreStart: '08:00' });
+  assert.ok(regularDays(soft).every((d) => d.plannedWorked === 5.5 * H && d.arrival === '08:00' && d.plannedLeave === '14:00'));
+  // stejné pravidlo s jinou přestávkou (45 min) → 5:15
+  const off45 = plan({ today: '2027-02-15', records: huge, anchorStrength: 'off', coreStart: '08:00', breakLengthMinutes: 45 });
+  assert.ok(regularDays(off45).every((d) => d.plannedWorked === 5.25 * H));
+});
+
+test('kotva odchodu při soft: přebytek → odchod dřív, příchod v coreStart', () => {
+  // malý přebytek vyrovná už 1. průchod posunem příchodu (kotva odchodu 14:30 drží)
+  const small = plan({ ...MID, ...DEP, anchorStrength: 'soft' });
+  assert.equal(small.summary.unbalanced, 0);
+  assert.ok(regularDays(small).every((d) => !d.relaxed && d.plannedLeave === '14:30' && d.arrival === '08:00'));
+  // velký přebytek: příchod v 09:00 nestačí → odchod se posune dřív, nejvýš na konec povinné doby 14:00
+  const huge = SURPLUS.map((r) => ({ ...r, departure: '20:00' }));
+  const soft = plan({ ...DEP, today: '2027-02-15', records: huge, anchorStrength: 'soft' });
+  assert.ok(regularDays(soft).every((d) => d.relaxed && d.arrival === '09:00' && d.plannedLeave === '14:00' && d.plannedWorked === 5 * H));
+  const hard = plan({ ...DEP, today: '2027-02-15', records: huge });
+  assert.equal(hard.summary.unbalanced - soft.summary.unbalanced, -10 * 30);
+});
+
+test('den s pevným vyzvedáváním zůstane pevný ve všech režimech', () => {
+  for (const anchorStrength of ['hard', 'soft', 'off']) {
+    const p = plan({ ...MID, anchorStrength, schedule: { odd: { 1: '14:30' }, even: { 2: { arriveAt: '07:00', leaveAt: '15:00' } } } });
+    const mon = day(p, '2027-02-15');                       // po lichého týdne 7: pevný odchod 14:30 (příchod z kotvy)
+    assert.equal(mon.kind, 'fixed', anchorStrength);
+    assert.equal(mon.arrival, '06:00');
+    assert.equal(mon.plannedLeave, '14:30');
+    assert.ok(!mon.relaxed && !mon.window);
+    const tue = day(p, '2027-02-23');                       // út sudého týdne 8: oba časy
+    assert.equal(tue.kind, 'fixed');
+    assert.equal(tue.arrival, '07:00');
+    assert.equal(tue.plannedLeave, '15:00');
+  }
+});
+
+test('výjimka dne přebije globální nastavení kotvy', () => {
+  const ov = [{ date: '2027-02-16', anchorStrength: 'off' }, { date: '2027-02-17', anchorStrength: 'soft' }];
+  const p = plan({ ...MID, overrides: ov });
+  assert.ok(day(p, '2027-02-16').window);                  // vypnuto jen pro tento den
+  assert.equal(day(p, '2027-02-17').relaxed, true);        // kolem jen pro tento den
+  assert.equal(day(p, '2027-02-18').relaxed, undefined);   // ostatní dny pevné
+  assert.equal(day(p, '2027-02-18').arrival, '06:00');
+  assert.ok(Math.abs(p.summary.unbalanced) < 15 * H);
+  // validace a prázdnost výjimky
+  assert.equal(validateOverride({ date: '2027-02-16', anchorStrength: 'hard' }, settings()).error.key, 'plan.error.anchorStrength');
+  assert.equal(validateOverride({ date: '2027-02-16', anchorStrength: 'soft' }, settings()).error, null);
+  assert.equal(isEmptyOverride({ date: '2027-02-16', anchorStrength: 'soft' }), false);
+});
+
+test('hromadné uvolnění kotvy v rozsahu a vrácení jedním krokem', () => {
+  const s = settings({ schedule: { even: { 2: { arriveAt: '07:00', leaveAt: '15:00' } } } });
+  const existing = [{ date: '2027-02-22', note: 'porada' }];
+  const range = { from: '2027-02-12', to: '2027-02-24', strength: 'soft', today: '2027-02-15', settings: s };
+  const ops = bulkRelaxAnchor({ ...range, overrides: existing });
+  // jen dnešní a budoucí pracovní dny, kde kotva určuje konec (út 23. 2. má oba časy z rozvrhu)
+  assert.deepEqual(ops.map((o) => o.date), ['2027-02-15', '2027-02-16', '2027-02-17', '2027-02-18', '2027-02-19', '2027-02-22', '2027-02-24']);
+  assert.deepEqual(ops[5].after, { date: '2027-02-22', note: 'porada', anchorStrength: 'soft' });
+  const applied = [...ops.map((o) => o.after)];
+  assert.equal(bulkRelaxAnchor({ ...range, overrides: applied }).length, 0);
+  const p = buildMonthPlan({ year: 2027, month: 2, ...MID, settings: s, overrides: applied });
+  assert.equal(day(p, '2027-02-15').anchorStrength, 'soft');
+  // vrácení: obnoví se stav „before“ (poznámka zůstane, uvolnění zmizí)
+  const undone = ops.map((o) => o.before).filter(Boolean);
+  const p2 = buildMonthPlan({ year: 2027, month: 2, ...MID, settings: s, overrides: undone });
+  assert.equal(day(p2, '2027-02-15').anchorStrength, 'hard');
+  assert.equal(day(p2, '2027-02-22').note, 'porada');
+  assert.deepEqual(bulkRelaxAnchor({ from: 'x', to: '2027-02-19', strength: 'soft', today: '2027-02-15', settings: s }), []);
+  assert.deepEqual(bulkRelaxAnchor({ from: '2027-02-12', to: '2027-02-19', strength: 'hard', today: '2027-02-15', settings: s }), []);
+});
+
+test('doporučení uvolnit kotvu: pomůže, nepomůže, není potřeba', () => {
+  const sug = anchorRelaxSuggestion({ year: 2027, month: 2, ...MID, settings: settings() });
+  assert.equal(sug.helps, true);
+  assert.equal(sug.before, -15 * H);
+  assert.equal(sug.after, 0);
+  assert.equal(sug.balanced, 15 * H);
+  assert.equal(sug.changed.length, 10);
+  assert.ok(sug.ops.every((o) => o.after.anchorStrength === 'soft'));
+  // vyrovnaný měsíc → nic
+  assert.equal(anchorRelaxSuggestion({ year: 2027, month: 2, today: '2027-02-01', settings: settings(), records: [] }), null);
+  // zbývají jen pevné dny → uvolnění nepomůže
+  const allFixed = { odd: Object.fromEntries([1, 2, 3, 4, 5].map((d) => [d, '14:00'])), even: Object.fromEntries([1, 2, 3, 4, 5].map((d) => [d, '14:00'])) };
+  const none = anchorRelaxSuggestion({ year: 2027, month: 2, ...MID, settings: settings({ schedule: allFixed }) });
+  assert.deepEqual(none, { helps: false, reason: 'noDays', before: none.before });
+  // kotva už je uvolněná a nedostatek je větší, než dny unesou → nic dalšího nenabízí
+  assert.equal(anchorRelaxSuggestion({ year: 2027, month: 2, today: '2027-02-22', settings: settings({ anchorStrength: 'soft' }), records: [] }).reason, 'alreadyRelaxed');
+  // po použití doporučení (výjimky soft) taky nic dalšího
+  const relaxed = sug.ops.map((o) => o.after);
+  assert.equal(anchorRelaxSuggestion({ year: 2027, month: 2, ...MID, settings: settings(), overrides: relaxed }), null);
+  // nedostatek, který posun kotvy nevyrovná ani nezlepší: max. 8 h práce (strop) → nepomůže
+  assert.equal(anchorRelaxSuggestion({ year: 2027, month: 2, today: '2027-02-22', settings: settings({ maxWorkedHoursPerDay: 8 }), records: [] }).reason, 'noEffect');
 });

@@ -637,8 +637,12 @@ function renderTodayPlan() {
   } else if (d.kind === 'absence') {
     title.textContent = t('today.absence', { type: typeLabel(d.type) });
     sub.textContent = t('common.wholeDay');
+  } else if (d.window) {
+    // kotva vypnutá a příchod ještě není: jen povolené okno a cílové hodiny
+    title.textContent = t('today.window', { arriveBy: d.window.arriveBy, leaveFrom: d.window.leaveFrom });
+    sub.textContent = t('today.targetHours', { hours: formatMinutes(d.plannedWorked) });
   } else if (d.plannedLeave && d.arrival) {
-    const how = t(d.kind === 'fixed' ? 'today.howFixed' : d.kind === 'override' ? 'today.howOverride' : 'today.howRegular');
+    const how = t(d.kind === 'fixed' ? 'today.howFixed' : d.kind === 'override' ? 'today.howOverride' : d.relaxed ? 'today.howRelaxed' : 'today.howRegular');
     // před příchodem nabídne plánovaný příchod, po něm plánovaný odchod
     const next = d.actualArrival ? 'departure' : 'arrival';
     title.textContent = next === 'arrival'

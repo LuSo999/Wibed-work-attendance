@@ -30,6 +30,11 @@ const msg = (key, params) => (params ? { key, params } : { key });
 export const DEFAULT_SETTINGS = Object.freeze({
   /** Kotva plánu: 'arrival' = pevný příchod a dopočítává se odchod, 'departure' = naopak. */
   anchorMode: 'arrival',
+  /**
+   * Pevnost kotvy: 'hard' = kotva drží (dřívější chování), 'soft' = kotvu lze posunout, když měsíc
+   * jinak nejde vyrovnat, 'off' = kotva se nepoužívá, běžné dny mají jen cílové hodiny.
+   */
+  anchorStrength: 'hard',
   /** Čas kotvy (příchod, resp. odchod). */
   anchorTime: '06:00',
   /** Hranice plánovače v obou režimech. */
@@ -60,6 +65,10 @@ function normalizeScheduleDay(v) {
   if (typeof v === 'string' || v == null) return { arriveAt: '', leaveAt: validTime(v, '') };
   return { arriveAt: validTime(v.arriveAt, ''), leaveAt: validTime(v.leaveAt, '') };
 }
+
+/** Pevnost kotvy v nastavení; výjimka dne smí jen uvolnit ('soft' | 'off'). */
+export const ANCHOR_STRENGTHS = ['hard', 'soft', 'off'];
+export const RELAX_VALUES = ['soft', 'off'];
 
 /** Nejstarší „platí od“ – verze platná odjakživa. */
 export const RULES_SINCE_EVER = '0000-01-01';
@@ -104,6 +113,8 @@ export function normalizeSettings(raw = {}) {
   const { dailyFundHours, breakAfterHours, breakLengthMinutes } = ruleVersions[ruleVersions.length - 1];
   return {
     anchorMode: raw.anchorMode === 'departure' ? 'departure' : 'arrival',
+    // nastavení bez pole (starší data) = pevná kotva
+    anchorStrength: ANCHOR_STRENGTHS.includes(raw.anchorStrength) ? raw.anchorStrength : 'hard',
     // startTime = dřívější název pro čas příchodu
     anchorTime: validTime(raw.anchorTime ?? raw.startTime, d.anchorTime),
     earliestArrival: validTime(raw.earliestArrival, d.earliestArrival),
@@ -376,6 +387,57 @@ function distribute(units, caps) {
   return { alloc, left };
 }
 
+/**
+ * Rozloží `amount` minut na dny rovnoměrně po 15 min (sign > 0 přidává, < 0 ubírá) až po mez
+ * `limit(day)`; zbytek pod 15 min dostane den nejblíže středu, který ho ještě unese.
+ * Mění day.plannedWorked, vrací minuty, které se nevešly.
+ */
+function spread(list, amount, sign, limit) {
+  const room = (x) => Math.max(0, sign > 0 ? limit(x) - x.plannedWorked : x.plannedWorked - limit(x));
+  const caps = list.map((x) => Math.floor(room(x) / PLAN_STEP_MIN));
+  const { alloc, left } = distribute(Math.floor(amount / PLAN_STEP_MIN), caps);
+  list.forEach((x, i) => { x.plannedWorked += sign * alloc[i] * PLAN_STEP_MIN; });
+  let rest = (amount % PLAN_STEP_MIN) + left * PLAN_STEP_MIN;
+  if (rest > 0) {
+    const mid = (list.length - 1) / 2;
+    const order = list.map((x, i) => i).sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid));
+    for (const i of order) {
+      const give = Math.min(room(list[i]), rest);
+      list[i].plannedWorked += sign * give;
+      rest -= give;
+      if (!rest) break;
+    }
+  }
+  return rest;
+}
+
+/** Nejkratší pobyt aspoň `minStay`, který dá aspoň `worked` odpracovaných minut. */
+function stayCovering(worked, rules, minStay) {
+  let stay = Math.max(minStay, stayForWorked(worked, rules));
+  while (workedForStay(stay, rules) < worked && stay < 1440) stay++;
+  return stay;
+}
+
+/**
+ * Časy dne s uvolněnou kotvou (2. průchod). Přebytek: den drží celou povinnou dobu a kotevní konec
+ * se posune k ní (příchod později / odchod dřív). Nedostatek: druhý konec zůstane z 1. průchodu
+ * (na hranici) a kotevní konec se posune ven (příchod dřív / odchod později).
+ */
+function relaxEnds(x, sign) {
+  const { coreStart, coreEnd } = x.bounds;
+  const pass1Stay = stayForWorked(x.pass1, x.rules);
+  const stay = sign < 0 ? stayCovering(x.plannedWorked, x.rules, coreEnd - coreStart) : stayForWorked(x.plannedWorked, x.rules);
+  if (x.flex === 'leave') {
+    // kotva = příchod
+    x.relaxedLeave = sign < 0 ? coreEnd : x.fixedTime + pass1Stay;
+    x.relaxedArrival = x.relaxedLeave - stay;
+  } else {
+    // kotva = odchod
+    x.relaxedArrival = sign < 0 ? coreStart : x.fixedTime - pass1Stay;
+    x.relaxedLeave = x.relaxedArrival + stay;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Plán měsíce
 // ---------------------------------------------------------------------------
@@ -420,9 +482,18 @@ export function dayEnds(date, settings, { override = null, record = null } = {})
     clearsArrival(clear) && sched.arriveAt && !override?.arriveAt && actualArr === null ? 'arrival' : null,
     clearsLeave(clear) && sched.leaveAt && !override?.leaveAt ? 'leave' : null,
   );
-  if (s.anchorMode === 'arrival') arr ??= parseTime(s.anchorTime);
-  else lv ??= parseTime(s.anchorTime);
-  return { arr, lv, actualArrival: actualArr !== null, explicitArrival, explicitLeave, cleared, schedule: sched };
+  // konec doplněný kotvou (jen ten se dá uvolnit; skutečný příchod, výjimka a rozvrh zůstávají pevné)
+  let anchored = null;
+  if (s.anchorMode === 'arrival' && arr === null) {
+    arr = parseTime(s.anchorTime);
+    anchored = 'arrival';
+  } else if (s.anchorMode === 'departure' && lv === null) {
+    lv = parseTime(s.anchorTime);
+    anchored = 'leave';
+  }
+  return {
+    arr, lv, actualArrival: actualArr !== null, explicitArrival, explicitLeave, cleared, schedule: sched, anchored,
+  };
 }
 
 export const NOTE_MAX = 200;
@@ -436,6 +507,7 @@ export function validateOverride(ov, settings) {
   const warnings = [];
   if ((ov.note ?? '').length > NOTE_MAX) return { error: msg('plan.error.noteTooLong', { max: NOTE_MAX }), warnings };
   if (ov.clearFixed != null && !CLEAR_VALUES.includes(ov.clearFixed)) return { error: msg('plan.error.clearFixed'), warnings };
+  if (ov.anchorStrength != null && !RELAX_VALUES.includes(ov.anchorStrength)) return { error: msg('plan.error.anchorStrength'), warnings };
   if (ov.absenceType && ov.absenceHours != null && ov.absenceHours !== '' && !(Number(ov.absenceHours) > 0)) {
     return { error: msg('error.absenceHoursPositive'), warnings };
   }
@@ -466,7 +538,7 @@ export function canEditOverride(day, today) {
 /** Je výjimka prázdná (nic nemění)? Takovou je lepší smazat. */
 export function isEmptyOverride(ov) {
   return !ov.absenceType && !ov.arriveAt && !ov.leaveAt && (ov.workedHours == null || ov.workedHours === '')
-    && !ov.clearFixed && !(ov.note ?? '').trim();
+    && !ov.clearFixed && !ov.anchorStrength && !(ov.note ?? '').trim();
 }
 
 function addDaysStr(dateStr, delta) {
@@ -495,6 +567,29 @@ export function bulkClearFixed({ from, to, what, today, settings, overrides = []
     const clearFixed = mergeClearFixed(before?.clearFixed, relevant);
     if (before && before.clearFixed === clearFixed) continue;
     ops.push({ date, before, after: { ...(before ?? {}), date, clearFixed } });
+  }
+  return ops;
+}
+
+/**
+ * Hromadné uvolnění kotvy v rozsahu dat: výjimky anchorStrength ('soft' | 'off') pro dnešní
+ * a budoucí pracovní dny, jejichž jeden konec určuje kotva (ne rozvrh). Ostatní pole výjimek zůstávají.
+ * Vrací [{date, before, after}] – before umožní akci jedním krokem vrátit.
+ */
+export function bulkRelaxAnchor({ from, to, strength, today, settings, overrides = [] }) {
+  if (!parseDate(from) || !parseDate(to) || !RELAX_VALUES.includes(strength)) return [];
+  const s = normalizeSettings(settings);
+  const ovMap = new Map(overrides.map((o) => [o.date, o]));
+  const ops = [];
+  let date = from < today ? today : from;
+  for (let i = 0; date <= to && i < 400; i++, date = addDaysStr(date, 1)) {
+    if (!isWorkday(date)) continue;
+    const before = ovMap.get(date) ?? null;
+    // jen dny, kde kotva určuje konec a druhý konec není pevný (plně pevné dny z rozvrhu se neuvolňují)
+    const ends = dayEnds(date, s, { override: before });
+    const relaxable = ends.anchored === 'arrival' ? !ends.explicitLeave : ends.anchored === 'leave' && !ends.explicitArrival;
+    if (!relaxable || before?.anchorStrength === strength) continue;
+    ops.push({ date, before, after: { ...(before ?? {}), date, anchorStrength: strength } });
   }
   return ops;
 }
@@ -627,16 +722,37 @@ export function buildMonthPlan({ year, month, today, settings, records, override
     } else {
       // Běžný den: jeden konec pevný, druhý se posouvá v hranicích.
       day.kind = 'regular';
-      day.flex = lv === null ? 'leave' : 'arrival';
-      day.fixedTime = day.flex === 'leave' ? arr : lv;
-      const maxStay = day.flex === 'leave' ? latest - arr : lv - Math.max(0, earliest);
-      const coreStay = day.flex === 'leave' ? coreEnd - arr : lv - coreStart;
-      const cap = Math.min(maxWorked, workedForStay(Math.max(0, maxStay), dayRules));
-      const base = Math.min(Math.max(0, fundDay - absMin), cap);
-      day.base = base;
-      day.min = absMin > 0 ? 0 : Math.min(workedForStay(Math.max(0, coreStay), dayRules), base);
-      day.max = Math.max(cap, base);
-      day.plannedWorked = base;
+      // pevnost kotvy: výjimka dne > nastavení; jen když pevný konec doplnila kotva
+      day.anchorStrength = ends.anchored ? (RELAX_VALUES.includes(ov?.anchorStrength) ? ov.anchorStrength : s.anchorStrength) : 'hard';
+      // nejkratší den pokrývá celou povinnou dobu (po odečtení přestávky podle pravidla)
+      const coreMin = absMin > 0 ? 0 : workedForStay(Math.max(0, coreEnd - coreStart), dayRules);
+      const windowMax = Math.min(maxWorked, workedForStay(Math.max(0, latest - Math.max(0, earliest)), dayRules));
+      if (day.anchorStrength === 'off') {
+        // kotva vypnutá: jen cílové hodiny v mezích povinné doby, maxima a hranic (časy se neplánují)
+        day.window = { arriveBy: s.coreStart, leaveFrom: s.coreEnd };
+        const base = Math.min(Math.max(0, fundDay - absMin), windowMax);
+        day.base = base;
+        day.min = Math.min(coreMin, base);
+        day.max = Math.max(windowMax, base);
+        day.plannedWorked = base;
+      } else {
+        day.flex = lv === null ? 'leave' : 'arrival';
+        day.fixedTime = day.flex === 'leave' ? arr : lv;
+        const maxStay = day.flex === 'leave' ? latest - arr : lv - Math.max(0, earliest);
+        const coreStay = day.flex === 'leave' ? coreEnd - arr : lv - coreStart;
+        const cap = Math.min(maxWorked, workedForStay(Math.max(0, maxStay), dayRules));
+        const base = Math.min(Math.max(0, fundDay - absMin), cap);
+        day.base = base;
+        day.min = absMin > 0 ? 0 : Math.min(workedForStay(Math.max(0, coreStay), dayRules), base);
+        day.max = Math.max(cap, base);
+        day.plannedWorked = base;
+        if (day.anchorStrength === 'soft') {
+          // meze pro 2. průchod: celá povinná doba / celé okno mezi hranicemi
+          day.relaxMin = Math.min(coreMin, day.min);
+          day.relaxMax = Math.max(windowMax, day.max);
+          day.bounds = { earliest: Math.max(0, earliest), latest, coreStart, coreEnd };
+        }
+      }
     }
   }
 
@@ -645,37 +761,41 @@ export function buildMonthPlan({ year, month, today, settings, records, override
   const regular = days.filter((x) => x.kind === 'regular');
   const totalCredited = () => days.reduce((sum, x) => sum + (x.plannedWorked !== null && x.kind !== 'absence' ? x.plannedWorked + x.absence : x.credited), 0);
   const deficit = fund - totalCredited();
-  let unbalanced = 0;
+  let unbalanced = deficit;
 
   if (deficit !== 0 && regular.length) {
+    // 1. průchod: posun nefixovaného konce v mezích dne (min/max)
     const sign = Math.sign(deficit);
-    const amount = Math.abs(deficit);
-    const caps = regular.map((x) => Math.floor((sign > 0 ? x.max - x.base : x.base - x.min) / PLAN_STEP_MIN));
-    const { alloc, left } = distribute(Math.floor(amount / PLAN_STEP_MIN), caps);
-    regular.forEach((x, i) => { x.plannedWorked += sign * alloc[i] * PLAN_STEP_MIN; });
-    // Zbytek pod 15 min dostane den nejblíže středu, který ho ještě unese → přesně na nulu.
-    let rest = (amount % PLAN_STEP_MIN) + left * PLAN_STEP_MIN;
-    if (rest > 0) {
-      const mid = (regular.length - 1) / 2;
-      const order = regular.map((x, i) => i).sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid));
-      for (const i of order) {
-        const x = regular[i];
-        const room = sign > 0 ? x.max - x.plannedWorked : x.plannedWorked - x.min;
-        const give = Math.min(room, rest);
-        x.plannedWorked += sign * give;
-        rest -= give;
-        if (!rest) break;
+    unbalanced = sign * spread(regular, Math.abs(deficit), sign, (x) => (sign > 0 ? x.max : x.min)) || 0;
+    // 2. průchod (kotva „kolem“): zbytek se rozloží posunem kotevního konce až na hranici povinné doby
+    //    (přebytek), resp. až na nejdřívější příchod / nejpozdější odchod (nedostatek)
+    const soft = regular.filter((x) => x.anchorStrength === 'soft');
+    if (unbalanced !== 0 && soft.length) {
+      for (const x of soft) x.pass1 = x.plannedWorked;
+      const limit = (x) => (sign > 0 ? x.relaxMax : x.relaxMin);
+      unbalanced = sign * spread(soft, Math.abs(unbalanced), sign, limit) || 0;
+      for (const x of soft) {
+        if (x.plannedWorked === x.pass1) continue;
+        x.relaxed = true;
+        relaxEnds(x, sign);
       }
     }
-    unbalanced = sign * rest;
-  } else {
-    unbalanced = deficit;
   }
 
   // Časy příchodu a odchodu, varování
   for (const x of days) {
     if (x.plannedWorked === null || x.kind === 'absence') continue;
-    if (x.kind === 'regular' || x.kind === 'override') {
+    if (x.window) {
+      // kotva vypnutá: místo časů povolené okno a cílové hodiny
+      x.arrival = null;
+      x.plannedLeave = null;
+      x.credited = x.plannedWorked + x.absence;
+      continue;
+    }
+    if (x.relaxed) {
+      x.plannedArrivalMin = x.relaxedArrival;
+      x.plannedLeaveMin = x.relaxedLeave;
+    } else if (x.kind === 'regular' || x.kind === 'override') {
       const stay = stayForWorked(x.plannedWorked, x.rules);
       x.plannedArrivalMin = x.flex === 'leave' ? x.fixedTime : x.fixedTime - stay;
       x.plannedLeaveMin = x.flex === 'leave' ? x.fixedTime + stay : x.fixedTime;
@@ -724,6 +844,39 @@ export function buildMonthPlan({ year, month, today, settings, records, override
       averageRegular: regular.length ? Math.round(regularWorked / regular.length) : null,
       missingDays: missing,
     },
+  };
+}
+
+/**
+ * Doporučení „Měsíc nelze vyrovnat kvůli pevné kotvě. Uvolnit na zbývající dny?“
+ *
+ * Vrací null, pokud je měsíc vyrovnaný. Jinak spočítá plán s výjimkami anchorStrength: 'soft'
+ * pro zbývající běžné dny s pevnou kotvou a porovná zbytek:
+ *   { helps: true, before, after, balanced, changed: [datum…], ops: [{date, before, after}] }
+ *   { helps: false, reason: 'noDays' | 'noEffect' | 'alreadyRelaxed', before }
+ * (before/after = nevyrovnané minuty, balanced = o kolik minut se měsíc přiblíží k nule).
+ */
+export function anchorRelaxSuggestion({ year, month, today, settings, records, overrides = [] }) {
+  const plan = buildMonthPlan({ year, month, today, settings, records, overrides });
+  const before = plan.summary.unbalanced;
+  if (!before) return null;
+  const s = normalizeSettings(settings);
+  const regular = plan.days.filter((d) => d.kind === 'regular');
+  const candidates = regular.filter((d) => d.anchorStrength === 'hard' && dayEnds(d.date, s, { override: d.override, record: d.record }).anchored);
+  if (!candidates.length) {
+    // kotva zbývajících dnů už je uvolněná → není co nabízet; jinak zbývají jen pevné dny
+    return { helps: false, reason: regular.some((d) => d.anchorStrength !== 'hard') ? 'alreadyRelaxed' : 'noDays', before };
+  }
+  const ops = candidates.map((d) => ({ date: d.date, before: d.override ?? null, after: { ...(d.override ?? {}), date: d.date, anchorStrength: 'soft' } }));
+  const changedOvs = new Map(ops.map((o) => [o.date, o.after]));
+  const next = buildMonthPlan({
+    year, month, today, settings, records, overrides: [...overrides.filter((o) => !changedOvs.has(o.date)), ...changedOvs.values()],
+  });
+  const after = next.summary.unbalanced;
+  if (Math.abs(after) >= Math.abs(before)) return { helps: false, reason: 'noEffect', before };
+  const changed = next.days.filter((d) => d.relaxed).map((d) => d.date);
+  return {
+    helps: true, before, after, balanced: Math.abs(before) - Math.abs(after), changed, ops,
   };
 }
 

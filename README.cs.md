@@ -57,8 +57,8 @@ Data ve Firestore:
 - `users/{uid}/overtimeBank/{id}` → `{ date, minutes, note, createdAt }` (výběry z banky)
 - `users/{uid}/settings/plan` → nastavení plánu (viz níže)
 - `users/{uid}/settings/app` → `{ language: 'cs' | 'en', czHolidays: true | false, onboardingDone }` (nastavení aplikace)
-- `users/{uid}/planOverrides/{YYYY-MM-DD}` → `{ absenceType, absenceHours, arriveAt, leaveAt, workedHours, clearFixed, note }` (výjimky dnů;
-  `clearFixed` = `'arrival' | 'leave' | 'both'`, `note` max. 200 znaků – oddělená od poznámky v docházce)
+- `users/{uid}/planOverrides/{YYYY-MM-DD}` → `{ absenceType, absenceHours, arriveAt, leaveAt, workedHours, clearFixed, anchorStrength, note }` (výjimky dnů;
+  `clearFixed` = `'arrival' | 'leave' | 'both'`, `anchorStrength` = `'soft' | 'off'` (uvolnění kotvy pro den), `note` max. 200 znaků – oddělená od poznámky v docházce)
 
 U záznamu docházky slouží `type` jako typ nepřítomnosti. `absenceHours` (v hodinách, prázdné = celý den) určuje
 částečnou nepřítomnost a `filled: true` označuje automaticky doplněný záznam.
@@ -149,6 +149,7 @@ každý měsíc se vyrovnává na nulu samostatně.
 | Pole | Výchozí | Význam |
 |---|---|---|
 | `anchorMode` | `arrival` | kotva plánu: `arrival` = pevný příchod a dopočítává/posouvá se odchod, `departure` = pevný odchod a dopočítává/posouvá se příchod |
+| `anchorStrength` | `hard` | pevnost kotvy: `hard` = pevná (dřívější chování, platí i pro nastavení bez pole), `soft` = kolem (kotva se posune, když měsíc jinak nejde vyrovnat), `off` = vypnutá (jen cílové hodiny, viz níže) |
 | `anchorTime` | 06:00 | čas kotvy (dřívější `startTime` se načte jako příchod) |
 | `earliestArrival`, `latestDeparture` | 05:00, 17:00 | hranice plánovače v obou režimech – posouvaný konec je nepřekročí |
 | `coreStart`, `coreEnd` | 09:00, 14:00 | pevná pracovní doba (jen pro varování a minimum zkrácení) |
@@ -197,6 +198,27 @@ za ozubeným kolečkem **⚙ Nastavení** na stránce Plán – na počítači j
 **Rozvrh** a **Pravidla** (ovladatelné i šipkami). Změny fondu, přestávky a svátků procházejí dialogem dopadu (viz Ochrana historie).
 
 **Souhrn:** na mobilu jsou vidět Předpoklad, Odchylka a Průměr, ostatní (Fond, Odpracováno, Plán zbývá) po klepnutí na „Další údaje“.
+
+**Pevnost kotvy** (⚙ Nastavení → Pravidla, výběr Pevný / Kolem / Vypnuto; výjimka dne má přednost):
+
+- **Pevný** (`hard`): kotva se nikdy neposune. Při přebytku nejde běžný den zkrátit pod pobyt `coreEnd` − kotva, takže plán může hlásit
+  „měsíc nelze vyrovnat“.
+- **Kolem** (`soft`): nejdřív se měsíc vyrovnává posunem druhého konce dne (jako u pevné kotvy). Když zbude nevyrovnaný zbytek, druhý průchod
+  rovnoměrně po 15 min posune i kotevní konec – při přebytku příchod nejpozději na `coreStart` (resp. odchod nejdřív na `coreEnd`), den
+  ale vždy pokryje celou povinnou dobu; při nedostatku hodin až na `earliestArrival` / `latestDeparture`. Takové dny mají příznak `relaxed`
+  a štítek „kotva posunuta“.
+- **Vypnuto** (`off`): kotva se nepoužívá. Běžné dny dostanou jen cílové hodiny v mezích: nejméně odpracováno za pobyt `coreEnd − coreStart`
+  (po odečtení přestávky podle pravidla, např. 08:00–14:00 = 6:00 pobytu → 5:30), nejvýš `maxWorkedHoursPerDay` a pobyt
+  `latestDeparture − earliestArrival`. Tabulka místo časů ukazuje okno „do HH:MM / od HH:MM“ a štítek „bez kotvy“. Karta Dnes před
+  příchodem ukáže okno a cílové hodiny, po zaznamenaném příchodu dopočítá odchod ze skutečného příchodu. Doplnění docházky za proběhlé
+  dny dál vychází z času kotvy.
+- Dny s pevnými časy z rozvrhu (např. vyzvedávání) a výjimky s pevnými časy či hodinami zůstávají pevné ve všech režimech.
+- **Dočasné uvolnění:** v dialogu dne „Uvolnit kotvu pro tento den“ (kolem / vypnuto) a hromadně **Uvolnit kotvu v rozsahu…**
+  (dnešní a budoucí pracovní dny, kde kotva určuje konec dne; vratné jedním krokem).
+- **Doporučení:** když měsíc nejde vyrovnat a uvolnění kotvy by pomohlo, Plán nabídne „Měsíc nelze vyrovnat kvůli pevné kotvě. Uvolnit na
+  zbývající dny?“ s náhledem (kolik hodin se vyrovná, které dny se změní). **Uvolnit** vytvoří výjimky `anchorStrength: 'soft'` pro zbývající
+  běžné dny (vratné jedním krokem), **Ponechat** hlášku pro daný měsíc skryje do obnovení stránky (nic se neukládá). Pokud uvolnění nepomůže
+  (zbývají jen pevné dny nebo ani posun kotvy měsíc nevyrovná), hláška to řekne.
 
 **Tabulka plánu:** sloupce Příchod, Odchod, Plán (h) a Skutečnost (h). U proběhlých dnů jsou časy skutečné,
 u budoucích plánované (kurzívou, tlumeně). Týdny odděluje výrazná hlavička (číslo týdne, lichý/sudý, rozsah dat) a řádky mají jemně

@@ -8,6 +8,7 @@ import {
   weekParity, normalizeSettings, settingsWarnings, workedForStay, stayForWorked,
   rulesFromSettings, switchAnchorMode, validateOverride, isEmptyOverride, bulkClearFixed, scheduledDay,
   applyRuleChange, isRuleChange, ruleChangeImpact, holidayChangeImpact, RULES_SINCE_EVER, NOTE_MAX, canEditOverride,
+  bulkRelaxAnchor, anchorRelaxSuggestion,
 } from './plan.js';
 import { enhanceTimeInputs } from './time24.js';
 import {
@@ -194,8 +195,11 @@ function renderSettingsForm(settings) {
     if (document.activeElement !== f[name]) f[name].value = settings[name];
   }
   f.anchorMode.value = settings.anchorMode;
+  f.anchorStrength.value = settings.anchorStrength;
+  $('#anchor-strength-hint').textContent = t(`anchorStrength.hint.${settings.anchorStrength}`, { coreStart: settings.coreStart, coreEnd: settings.coreEnd });
   f.czHolidays.checked = ctx.getState().app?.czHolidays !== false;
-  $('#anchor-hint').textContent = settings.anchorMode === 'arrival'
+  $('#anchor-hint').textContent = settings.anchorStrength === 'off' ? t('settings.anchorHintOff', { time: settings.anchorTime })
+    : settings.anchorMode === 'arrival'
     ? t('settings.anchorHintArr', { time: settings.anchorTime, limit: settings.latestDeparture })
     : t('settings.anchorHintDep', { time: settings.anchorTime, limit: settings.earliestArrival });
   $('#break-rule-text').textContent = breakRuleText(settings);
@@ -240,6 +244,7 @@ function onSettingsChange(e) {
   const raw = { ...settings };
   for (const name of TIME_FIELDS) raw[name] = f[name].value;
   for (const name of NUMBER_FIELDS) raw[name] = f[name].valueAsNumber;
+  raw.anchorStrength = f.anchorStrength.value;
   const breakErr = !(raw.dailyFundHours > 0 && raw.dailyFundHours <= 24) ? 'settings.errFund'
     : !(raw.breakAfterHours > 0 && raw.breakAfterHours <= 24) ? 'settings.errBreakAfter'
     : !(Number.isInteger(raw.breakLengthMinutes) && raw.breakLengthMinutes >= 0) ? 'settings.errBreakLength'
@@ -348,6 +353,8 @@ const KIND_CHIP = {
   override: { label: 'legend.override', chip: 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200' },
   regular: { label: 'legend.regular', chip: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200' },
   cleared: { label: '', chip: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
+  relaxed: { label: 'tag.relaxed', chip: 'bg-orange-100 text-orange-800 dark:bg-orange-900/60 dark:text-orange-200' },
+  anchorOff: { label: 'tag.anchorOff', chip: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200' },
   off: { label: '', chip: '' },
 };
 
@@ -381,6 +388,8 @@ function typeText(d) {
   if (d.kind === 'fixed') parts.push(chip(styleKey(d), styleKey(d) === 'fixed' ? fixed ?? t(d.actualArrival ? 'tag.todayArrival' : 'tag.fixedDay') : undefined));
   else parts.push(chip(styleKey(d)));
   if (fixed && (d.kind !== 'fixed' || styleKey(d) !== 'fixed')) parts.push(chip('fixed', fixed));
+  if (d.relaxed) parts.push(chip('relaxed'));
+  if (d.window) parts.push(chip('anchorOff'));
   return parts.join(' ');
 }
 
@@ -390,6 +399,9 @@ function timeCell(actual, planned) {
   if (planned) return `<span class="italic text-slate-500 dark:text-slate-400" title="${escapeHtml(t('table.planned'))}">${planned}</span>`;
   return '';
 }
+
+/** Kotva vypnutá: místo času povolené okno („do 09:00“ / „od 14:00“), tlumeně. */
+const windowCell = (text) => `<span class="text-[11px] italic text-slate-500 dark:text-slate-400">${escapeHtml(text)}</span>`;
 
 function actualText(d) {
   if (!d.record) return d.kind === 'missing' ? '<span class="text-rose-600 dark:text-rose-400">—</span>' : '';
@@ -402,6 +414,7 @@ function rowTitle(d) {
   const parts = [t('week.badge', { week: d.week, parity: parityLabel(d.parity) })];
   if (r?.arrival) parts.push(t('table.actualTimes', { from: r.arrival, to: r.departure ?? '…' }));
   if (d.plannedLeave) parts.push(t('table.plannedTimes', { arrival: d.arrival, leave: d.plannedLeave }));
+  if (d.window) parts.push(t('table.windowTitle', { arriveBy: d.window.arriveBy, leaveFrom: d.window.leaveFrom, hours: formatMinutes(d.plannedWorked) }));
   return [...parts, ...d.warnings.map(tr)].join(' · ');
 }
 
@@ -439,6 +452,8 @@ function renderMonthPlan() {
   ].join('');
   renderSummaryToggle();
 
+  renderRelaxHint(s);
+
   const warnEl = $('#plan-warnings');
   warnEl.innerHTML = plan.warnings.map((w) => `<li>⚠ ${escapeHtml(tr(w))}</li>`).join('');
   warnEl.hidden = !plan.warnings.length;
@@ -465,8 +480,8 @@ function renderMonthPlan() {
         <td class="whitespace-nowrap py-1.5 pl-1.5 pr-1"><span class="tabular">${dayNum}.</span> <span class="text-[11px] ${weekend ? '' : 'text-slate-500 dark:text-slate-400'}">${escapeHtml(weekdayShort(d.date))}</span>
           <span class="rounded px-1 text-[10px] font-bold ${WEEK_TONE[d.parity].badge}" title="${escapeHtml(t('week.badge', { week: d.week, parity: parityLabel(d.parity) }))}">${escapeHtml(t(`parity.short.${d.parity}`))}</span>${isToday ? `<span class="mt-0.5 block w-fit rounded bg-indigo-600 px-1 text-[10px] font-bold text-white">${escapeHtml(t('table.today'))}</span>` : ''}</td>
         <td class="px-1 py-1.5 text-xs"><div class="max-w-[5.25rem] sm:max-w-none">${typeText(d)}${warn}</div></td>
-        <td class="tabular whitespace-nowrap px-1 py-1.5 text-right">${timeCell(d.record?.arrival, d.plannedWorked !== null ? d.arrival : null)}</td>
-        <td class="tabular whitespace-nowrap px-1 py-1.5 text-right">${timeCell(d.record?.departure, d.plannedWorked !== null ? d.plannedLeave : null)}</td>
+        <td class="tabular whitespace-nowrap px-1 py-1.5 text-right">${d.window && !d.record?.arrival ? windowCell(t('table.arriveBy', { time: d.window.arriveBy })) : timeCell(d.record?.arrival, d.plannedWorked !== null ? d.arrival : null)}</td>
+        <td class="tabular whitespace-nowrap px-1 py-1.5 text-right">${d.window ? windowCell(t('table.leaveFrom', { time: d.window.leaveFrom })) : timeCell(d.record?.departure, d.plannedWorked !== null ? d.plannedLeave : null)}</td>
         <td class="tabular whitespace-nowrap px-1 py-1.5 text-right">${d.plannedWorked !== null && d.kind !== 'absence' ? formatMinutes(d.plannedWorked) : ''}</td>
         <td class="tabular whitespace-nowrap py-1.5 pl-1 pr-2 text-right">${actualText(d)}</td>
       </tr>${d.note ? `
@@ -613,6 +628,7 @@ function overrideFromForm() {
     leaveAt: f.leaveAt.value || null,
     workedHours: f.workedHours.value !== '' ? f.workedHours.valueAsNumber : null,
     clearFixed: clearArr && clearLv ? 'both' : clearArr ? 'arrival' : clearLv ? 'leave' : null,
+    anchorStrength: f.anchorStrength.value || null,
     note: f.note.value,
   };
 }
@@ -635,13 +651,15 @@ function updateOverrideDialog() {
     const d = plan.days.find((x) => x.date === overrideDate);
     const parts = [];
     if (d.kind === 'absence') parts.push(t('ov.previewAbsence', { type: typeLabel(d.type).toLowerCase(), hours: h(d.credited) }));
-    else if (d.plannedWorked !== null) {
+    else if (d.window) {
+      parts.push(t('ov.previewWindow', { hours: h(d.plannedWorked), arriveBy: d.window.arriveBy, leaveFrom: d.window.leaveFrom }));
+    } else if (d.plannedWorked !== null) {
       parts.push(t('ov.previewPlan', {
         hours: h(d.plannedWorked),
         absence: d.absence ? t('ov.previewPlanAbsence', { hours: h(d.absence) }) : '',
         from: d.arrival ?? '—',
         to: d.plannedLeave ?? '—',
-        computed: d.kind === 'regular' ? t('ov.previewComputed') : '',
+        computed: d.kind === 'regular' ? t(d.relaxed ? 'ov.previewRelaxed' : 'ov.previewComputed') : '',
       }));
     }
     parts.push(plan.summary.unbalanced ? tr(plan.warnings[0]) : t('ov.previewBalanced'));
@@ -669,6 +687,8 @@ export function openOverrideDialog(date) {
   f.leaveAt.value = ov?.leaveAt ?? '';
   f.workedHours.value = ov?.workedHours ?? '';
   f.note.value = ov?.note ?? '';
+  f.anchorStrength.value = ov?.anchorStrength ?? '';
+  $('#ov-anchor-hint').textContent = t('ov.anchorStrengthHint', { mode: t(`anchorStrength.${settings.anchorStrength}`).toLowerCase() });
   // zrušit lze jen pevný čas, který rozvrh pro tento den má
   const sched = scheduledDay(date, settings);
   for (const [field, name] of [['arriveAt', 'clearArrival'], ['leaveAt', 'clearLeave']]) {
@@ -697,7 +717,7 @@ export function openOverrideDialog(date) {
 // ---------------------------------------------------------------------------
 // Hromadné zrušení pevných časů (s vrácením jedním krokem)
 // ---------------------------------------------------------------------------
-let lastBulk = null; // { ops, what, from, to }
+let lastBulk = null; // { ops, text: {key, params} } – poslední hromadná akce, vratná jedním krokem
 
 function bulkClearOps() {
   const f = $('#form-bulk-clear');
@@ -729,18 +749,105 @@ function openBulkClear() {
     const ops = bulkClearOps();
     if (!ops.length) return;
     ctx.applyOverrides(ops.map((o) => ({ date: o.date, data: o.after })));
-    lastBulk = { ops, what: f.what.value, from: f.from.value, to: f.to.value };
+    lastBulk = {
+      ops,
+      text: { key: 'bulk.done', params: { what: { key: `bulk.${f.what.value}` }, count: ops.length, from: formatDateShort(f.from.value), to: formatDateShort(f.to.value) } },
+    };
     renderBulkUndo();
   }, { once: true });
 }
 
 function renderBulkUndo() {
   $('#bulk-undo').hidden = !lastBulk;
-  if (lastBulk) {
-    $('#bulk-undo-text').textContent = t('bulk.done', {
-      what: t(`bulk.${lastBulk.what}`), count: lastBulk.ops.length, from: formatDateShort(lastBulk.from), to: formatDateShort(lastBulk.to),
-    });
+  if (lastBulk) $('#bulk-undo-text').textContent = tr(lastBulk.text);
+}
+
+// ---------------------------------------------------------------------------
+// Uvolnění kotvy: hromadně v rozsahu a doporučení při nevyrovnatelném měsíci
+// ---------------------------------------------------------------------------
+function bulkRelaxOps() {
+  const f = $('#form-bulk-relax');
+  const { settings, overrides } = ctx.getState();
+  return bulkRelaxAnchor({ from: f.from.value, to: f.to.value, strength: f.strength.value, today: todayStr(), settings, overrides });
+}
+
+function updateBulkRelax() {
+  const f = $('#form-bulk-relax');
+  const ops = f.from.value && f.to.value && f.from.value <= f.to.value ? bulkRelaxOps() : [];
+  $('#bulk-relax-hint').textContent = t(`anchorStrength.hint.${f.strength.value}`, { coreStart: ctx.getState().settings.coreStart, coreEnd: ctx.getState().settings.coreEnd });
+  $('#bulk-relax-preview').textContent = ops.length
+    ? t('bulk.preview', { count: ops.length, dates: ops.map((o) => formatDateShort(o.date)).join(', ') })
+    : t('bulkRelax.none');
+  $('#bulk-relax-ok').disabled = !ops.length;
+}
+
+function openBulkRelax() {
+  const f = $('#form-bulk-relax');
+  const today = todayStr();
+  f.from.value = today;
+  const last = new Date(Date.UTC(planMonth.y, planMonth.m, 0)).toISOString().slice(0, 10);
+  f.to.value = last < today ? today : last;
+  f.strength.value = 'soft';
+  updateBulkRelax();
+  const dlg = $('#dlg-bulk-relax');
+  dlg.returnValue = '';
+  dlg.showModal();
+  dlg.addEventListener('close', () => {
+    if (dlg.returnValue !== 'ok') return;
+    const ops = bulkRelaxOps();
+    if (!ops.length) return;
+    ctx.applyOverrides(ops.map((o) => ({ date: o.date, data: o.after })));
+    lastBulk = {
+      ops,
+      text: { key: 'bulkRelax.done', params: { mode: { key: `anchorStrength.${f.strength.value}` }, count: ops.length, from: formatDateShort(f.from.value), to: formatDateShort(f.to.value) } },
+    };
+    renderBulkUndo();
+  }, { once: true });
+}
+
+// „Ponechat“ skryje doporučení pro daný měsíc do obnovení stránky (nikam se neukládá)
+const relaxDismissed = new Set();
+let relaxSuggestion = null;
+
+function renderRelaxHint(summary) {
+  const box = $('#plan-relax-hint');
+  const key = `${planMonth.y}-${planMonth.m}`;
+  const monthEnd = new Date(Date.UTC(planMonth.y, planMonth.m, 0)).toISOString().slice(0, 10);
+  relaxSuggestion = null;
+  // jen pro měsíc, který ještě neskončil, a jen když je nevyrovnaný
+  if (!summary.unbalanced || relaxDismissed.has(key) || monthEnd < todayStr()) {
+    box.hidden = true;
+    return;
   }
+  const { settings, records, overrides } = ctx.getState();
+  const sug = anchorRelaxSuggestion({ year: planMonth.y, month: planMonth.m, today: todayStr(), settings, records, overrides });
+  // po uvolnění (nebo s uvolněnou kotvou v nastavení) už se nic nenabízí
+  if (!sug || sug.reason === 'alreadyRelaxed') {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  $('#btn-relax-apply').hidden = !sug.helps;
+  if (sug.helps) {
+    relaxSuggestion = sug;
+    $('#plan-relax-title').textContent = t('relax.title');
+    const dates = sug.changed.map((d) => formatDayMonth(d)).join(', ');
+    $('#plan-relax-text').textContent = [
+      t('relax.preview', { hours: formatMinutes(sug.balanced), count: sug.changed.length, dates }),
+      sug.after ? t('relax.partial', { hours: formatMinutes(Math.abs(sug.after)) }) : t('relax.full'),
+    ].join(' ');
+  } else {
+    $('#plan-relax-title').textContent = t('relax.noHelpTitle');
+    $('#plan-relax-text').textContent = t(sug.reason === 'noDays' ? 'relax.noDays' : 'relax.noEffect');
+  }
+}
+
+function applyRelaxSuggestion() {
+  const sug = relaxSuggestion;
+  if (!sug) return;
+  ctx.applyOverrides(sug.ops.map((o) => ({ date: o.date, data: o.after })));
+  lastBulk = { ops: sug.ops, text: { key: 'relax.done', params: { count: sug.ops.length } } };
+  renderBulkUndo();
 }
 
 function undoBulk() {
@@ -793,6 +900,14 @@ export function initPlanView(context) {
     renderSummaryToggle();
   });
   $('#btn-bulk-clear').addEventListener('click', openBulkClear);
+  $('#btn-bulk-relax').addEventListener('click', openBulkRelax);
+  $('#form-bulk-relax').addEventListener('input', updateBulkRelax);
+  $('#form-bulk-relax').addEventListener('change', updateBulkRelax);
+  $('#btn-relax-apply').addEventListener('click', applyRelaxSuggestion);
+  $('#btn-relax-keep').addEventListener('click', () => {
+    relaxDismissed.add(`${planMonth.y}-${planMonth.m}`);
+    $('#plan-relax-hint').hidden = true;
+  });
   $('#form-bulk-clear').addEventListener('input', updateBulkClear);
   $('#form-bulk-clear').addEventListener('change', updateBulkClear);
   $('#btn-bulk-undo').addEventListener('click', undoBulk);

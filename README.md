@@ -57,8 +57,8 @@ Data in Firestore:
 - `users/{uid}/overtimeBank/{id}` → `{ date, minutes, note, createdAt }` (bank withdrawals)
 - `users/{uid}/settings/plan` → plan settings (see below)
 - `users/{uid}/settings/app` → `{ language: 'cs' | 'en', czHolidays: true | false, onboardingDone }` (app settings)
-- `users/{uid}/planOverrides/{YYYY-MM-DD}` → `{ absenceType, absenceHours, arriveAt, leaveAt, workedHours, clearFixed, note }` (day exceptions;
-  `clearFixed` = `'arrival' | 'leave' | 'both'`, `note` max. 200 characters – separate from the attendance note)
+- `users/{uid}/planOverrides/{YYYY-MM-DD}` → `{ absenceType, absenceHours, arriveAt, leaveAt, workedHours, clearFixed, anchorStrength, note }` (day exceptions;
+  `clearFixed` = `'arrival' | 'leave' | 'both'`, `anchorStrength` = `'soft' | 'off'` (anchor relaxed for the day), `note` max. 200 characters – separate from the attendance note)
 
 In an attendance record, `type` is the absence type. `absenceHours` (in hours, empty = whole day) marks a
 partial absence and `filled: true` marks an automatically filled record.
@@ -149,6 +149,7 @@ enter it, every month is balanced to zero on its own.
 | Field | Default | Meaning |
 |---|---|---|
 | `anchorMode` | `arrival` | plan anchor: `arrival` = fixed arrival and the departure is computed/moved, `departure` = fixed departure and the arrival is computed/moved |
+| `anchorStrength` | `hard` | anchor strength: `hard` = fixed (previous behaviour, also for settings without the field), `soft` = around (the anchor moves when the month cannot be balanced otherwise), `off` = no anchor (target hours only, see below) |
 | `anchorTime` | 06:00 | anchor time (the older `startTime` is loaded as arrival) |
 | `earliestArrival`, `latestDeparture` | 05:00, 17:00 | planner bounds in both modes – the moved end never crosses them |
 | `coreStart`, `coreEnd` | 09:00, 14:00 | core working time (only for warnings and the minimum shortening) |
@@ -197,6 +198,28 @@ panel behind the gear **⚙ Settings** on the Plan page – a modal window on de
 **Schedule** and **Rules** (also operable with the arrow keys). Changes of daily hours, break and holidays go through the impact dialog (see History protection).
 
 **Summary:** on mobile Projected, Deviation and Average are visible, the rest (Required, Worked, Plan remaining) after tapping "More figures".
+
+**Anchor strength** (⚙ Settings → Rules, choice Fixed / Around / Off; a day exception takes precedence):
+
+- **Fixed** (`hard`): the anchor never moves. With a surplus a regular day cannot be shorter than the stay `coreEnd` − anchor, so the plan
+  may report "the month cannot be balanced".
+- **Around** (`soft`): first the month is balanced by moving the other end of the day (as with a fixed anchor). If a remainder is left,
+  a second pass moves the anchor end too, evenly in 15 min steps – with a surplus the arrival at the latest to `coreStart` (or the departure
+  at the earliest to `coreEnd`), always covering the whole core time; with missing hours up to `earliestArrival` / `latestDeparture`.
+  Such days get the `relaxed` flag and the "anchor moved" tag.
+- **Off** (`off`): no anchor. Regular days only get target hours within limits: at least the worked time for the stay `coreEnd − coreStart`
+  (minus the break by the rule, e.g. 08:00–14:00 = 6:00 stay → 5:30), at most `maxWorkedHoursPerDay` and the stay
+  `latestDeparture − earliestArrival`. Instead of times the table shows the window "by HH:MM / from HH:MM" and the "no anchor" tag. Before
+  arrival the Today card shows the window and target hours; after a recorded arrival it computes the departure from the actual arrival.
+  Filling in attendance for past days still uses the anchor time.
+- Days with fixed times from the schedule (e.g. a pick-up) and exceptions with fixed times or hours stay fixed in all modes.
+- **Temporary relaxation:** "Relax the anchor for this day" (around / off) in the day dialog and in bulk with **Relax the anchor in a range…**
+  (today's and future work days where the anchor sets an end of the day; undoable in one step).
+- **Suggestion:** when the month cannot be balanced and relaxing the anchor would help, the Plan offers "The month cannot be balanced because
+  of the fixed anchor. Relax it for the remaining days?" with a preview (how many hours get balanced, which days change). **Relax** creates
+  `anchorStrength: 'soft'` exceptions for the remaining regular days (undoable in one step), **Keep** hides the notice for that month until
+  the page is reloaded (nothing is stored). If relaxing does not help (only fixed days remain or even moving the anchor does not balance the
+  month), the notice says so.
 
 **Plan table:** columns Arrival, Departure, Plan (h) and Actual (h). Past days show actual times,
 future days planned ones (italic, muted). Weeks are separated by a prominent header (week number, odd/even, date range) and rows have a
