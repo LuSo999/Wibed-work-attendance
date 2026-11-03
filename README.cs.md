@@ -65,6 +65,8 @@ U záznamu docházky slouží `type` jako typ nepřítomnosti. `absenceHours` (v
 
 Zůstatek banky se neukládá, vždy se dopočítává z dat, takže nemůže vzniknout nesoulad. Po vypnutí **Přenášet přesčasy mezi měsíci**
 (⚙ Nastavení → Pravidla) se počítá jen za aktuální měsíc (karta „Přesčasy tento měsíc“); data se nemění a volbu jde kdykoli vrátit.
+Záložka **Banka** se pak skryje a výběr náhradního volna s historií čerpání je v rozbalovací části **Čerpání a výběry z banky**
+pod kartou na Přehledu (ruční výběry tak zůstávají vidět i smazatelné).
 
 ## Nasazení krok za krokem
 

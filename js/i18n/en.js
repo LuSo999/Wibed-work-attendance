@@ -673,5 +673,6 @@ export default {
   'settings.carryOn': 'Overtime is carried over between months',
   'settings.carryOff': 'Overtime is not carried over – the bank shows this month only',
   'bank.titleMonth': 'Overtime this month',
+  'bank.toolsSummary': 'Withdrawals and time off from the bank',
   'bank.emptyMonth': 'There is no overtime to take this month (overtime is not carried over between months).',
 };

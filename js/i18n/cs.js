@@ -693,5 +693,6 @@ export default {
   'settings.carryOn': 'Přesčasy se přenášejí mezi měsíci',
   'settings.carryOff': 'Přesčasy se nepřenášejí – banka ukazuje jen tento měsíc',
   'bank.titleMonth': 'Přesčasy tento měsíc',
+  'bank.toolsSummary': 'Čerpání a výběry z banky',
   'bank.emptyMonth': 'V tomto měsíci nejsou přesčasy k výběru (přesčasy se mezi měsíci nepřenášejí).',
 };

@@ -65,6 +65,8 @@ partial absence and `filled: true` marks an automatically filled record.
 
 The bank balance is never stored, it is always computed from the data, so it can never get out of sync. With **Carry overtime over between
 months** turned off (⚙ Settings → Rules) only the current month counts (card "Overtime this month"); no data changes and the option can be switched back any time.
+The **Bank** tab is then hidden and taking time off with the withdrawal history moves to the collapsible **Withdrawals and time off from the bank**
+section below the card on the Overview (so manual withdrawals stay visible and deletable).
 
 ## Step-by-step deployment
 

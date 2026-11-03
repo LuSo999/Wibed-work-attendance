@@ -173,6 +173,11 @@
           </div>
         </div>
 
+        <details id="bank-more" data-hide-compact data-hide-quick class="rounded-2xl bg-slate-50 ring-1 ring-slate-200 dark:bg-slate-900/60 dark:ring-slate-800" hidden>
+          <summary class="cursor-pointer select-none px-4 py-3 text-sm font-medium text-indigo-600 dark:text-indigo-400" data-i18n="bank.toolsSummary"></summary>
+          <div id="bank-more-body" class="px-3 pb-3"></div>
+        </details>
+
         <div id="today-plan" data-hide-quick class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800">
           <div class="flex flex-wrap items-center gap-3">
             <div class="min-w-0 flex-1">
@@ -356,6 +361,7 @@
           <p id="bank-title-2" class="text-sm font-medium text-indigo-100"></p>
           <p id="bank-balance-2" class="tabular mt-1 text-4xl font-bold tracking-tight">–</p>
         </div>
+        <div id="bank-tools" class="space-y-4">
         <form id="form-withdraw" class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800" novalidate>
           <h2 class="font-semibold" data-i18n="bank.withdrawTitle"></h2>
           <p class="mt-1 text-sm text-slate-500 dark:text-slate-400" data-i18n="bank.withdrawHint"></p>
@@ -380,12 +386,13 @@
           <h2 class="px-5 pt-4 font-semibold" data-i18n="bank.history"></h2>
           <ul id="bank-history" class="mt-2 divide-y divide-slate-100 dark:divide-slate-800"></ul>
         </div>
+        </div>
       </div>
     </main>
 
     <!-- Spodní navigace (mobil) -->
     <nav data-hide-compact data-hide-quick class="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/90 backdrop-blur md:hidden dark:border-slate-800 dark:bg-slate-900/90" data-i18n-attr="aria-label:nav.label">
-      <div class="mx-auto grid max-w-md grid-cols-4">
+      <div id="nav-bottom-grid" class="mx-auto grid max-w-md grid-cols-4">
         <button data-tab="overview" class="tab-btn flex flex-col items-center gap-0.5 py-2 text-xs font-medium">
           <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg><span data-i18n="nav.overview"></span>
         </button>

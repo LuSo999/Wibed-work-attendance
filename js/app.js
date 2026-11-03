@@ -252,6 +252,8 @@ const TABS = {
 
 function showTab(tab) {
   if (!TABS[tab] || VIEW) tab = 'overview';
+  // bez přenosu přesčasů je záložka Banka skrytá (čerpání je na Přehledu)
+  if (tab === 'bank' && !state.settings.carryOverOvertime) tab = 'overview';
   for (const k of Object.keys(TABS)) $(`#tab-${k}`).hidden = k !== tab;
   for (const btn of $$('.tab-btn')) {
     const active = btn.dataset.tab === tab;
@@ -326,6 +328,25 @@ function renderBank() {
   $('#bank-month').parentElement.hidden = !carry;
   $('#bank-title').textContent = t(carry ? 'bank.title' : 'bank.titleMonth');
   $('#bank-title-2').textContent = t(carry ? 'bank.balanceTitle' : 'bank.titleMonth');
+  placeBankTools(carry);
+}
+
+/**
+ * Bez přenosu přesčasů se záložka Banka skryje a výběr náhradního volna s historií čerpání
+ * se přesune do rozbalovací části pod kartou na Přehledu (stejné prvky, jen jinde – nic se nezdvojuje).
+ */
+function placeBankTools(carry) {
+  const tools = $('#bank-tools');
+  const target = carry ? $('#tab-bank') : $('#bank-more-body');
+  if (tools.parentElement !== target) target.append(tools);
+  $('#bank-more').hidden = carry;
+  for (const btn of $$('.tab-btn[data-tab="bank"]')) btn.hidden = !carry;
+  $('#nav-bottom-grid').classList.toggle('grid-cols-4', carry);
+  $('#nav-bottom-grid').classList.toggle('grid-cols-3', !carry);
+  if (!carry && !$('#tab-bank').hidden) {
+    history.replaceState(null, '', `#${TABS.overview}`);
+    showTab('overview');
+  }
 }
 
 function renderEntry() {
