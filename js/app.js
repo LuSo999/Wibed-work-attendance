@@ -9,6 +9,7 @@ import { buildMonthCsv, downloadCsv } from './csv.js';
 import { enhanceTimeInputs, refreshTimeInputs } from './time24.js';
 import {
   normalizeSettings, rulesFromSettings, buildMonthPlan, fillRecord, holidayChangeImpact, bankZeroing, dayProgress,
+  balanceMonth,
 } from './plan.js';
 import {
   initPlanView, renderPlanView, weekBadgeHtml, flipParity, renderImpact, scrollPlanToToday,
@@ -54,7 +55,11 @@ let store; // modul store.js
 const records = () => [...state.records.values()];
 /** Pravidla uživatele – denní fond a přestávka (nastavení plánu, výchozí 8 h a 30 min po 6 h). */
 const rules = () => rulesFromSettings(state.settings);
-const balance = () => bankBalance(records(), state.withdrawals, rules());
+/**
+ * Zůstatek banky k datu (výchozí dnes). Bez přenosu přesčasů mezi měsíci jen za měsíc data,
+ * jinak za celou historii.
+ */
+const balance = (date = todayStr()) => bankBalance(records(), state.withdrawals, rules(), { month: balanceMonth(state.settings, date) });
 
 function safeResult(record) {
   try {
@@ -67,7 +72,7 @@ function safeResult(record) {
 /** Zůstatek banky bez vlivu daného dne (pro validaci jeho změny). */
 function balanceWithout(date) {
   const r = state.records.get(date);
-  return balance() - (r ? safeResult(r)?.bankDelta ?? 0 : 0);
+  return balance(date) - (r ? safeResult(r)?.bankDelta ?? 0 : 0);
 }
 
 const signed = (min) => formatMinutes(min, { sign: true });
@@ -223,7 +228,7 @@ function saveHolidays(enabled) {
 function askHolidays() {
   if (!state.user || state.app.czHolidays === false) return Promise.resolve();
   const impact = holidayChangeImpact({
-    records: records(), withdrawals: state.withdrawals, settings: state.settings, enabled: false,
+    records: records(), withdrawals: state.withdrawals, settings: state.settings, enabled: false, asOf: todayStr(),
   });
   renderImpact($('#holidays-impact'), impact);
   const dlg = $('#dlg-holidays');
@@ -316,6 +321,11 @@ function renderBank() {
   const s = monthSummary(records(), d.getFullYear(), d.getMonth() + 1, state.withdrawals, rules());
   $('#bank-month').textContent = `${signed(s.overtime)} h`;
   $('#bank-fund').textContent = `${formatMinutes(s.fund)} h`;
+  // bez přenosu je zůstatek jen za tento měsíc – řádek „Tento měsíc“ by byl stejný
+  const carry = state.settings.carryOverOvertime;
+  $('#bank-month').parentElement.hidden = !carry;
+  $('#bank-title').textContent = t(carry ? 'bank.title' : 'bank.titleMonth');
+  $('#bank-title-2').textContent = t(carry ? 'bank.balanceTitle' : 'bank.titleMonth');
 }
 
 function renderEntry() {
@@ -779,10 +789,12 @@ function withdrawMinutes() {
 function updateWithdrawForm() {
   const f = $('#form-withdraw');
   const minutes = withdrawMinutes();
-  const err = f.hours.value === '' ? null : validateWithdrawal(minutes, balance());
+  // bez přenosu přesčasů lze vybrat jen z přesčasů měsíce, do kterého výběr patří
+  const available = balance(f.date.value || todayStr());
+  const err = f.hours.value === '' ? null : validateWithdrawal(minutes, available);
   setError($('#withdraw-error'), err ? tr(err) : null);
-  $('#btn-withdraw').disabled = Boolean(err) || f.hours.value === '' || !f.date.value || balance() <= 0;
-  if (balance() <= 0 && !err) setError($('#withdraw-error'), t('bank.empty'));
+  $('#btn-withdraw').disabled = Boolean(err) || f.hours.value === '' || !f.date.value || available <= 0;
+  if (available <= 0 && !err) setError($('#withdraw-error'), t(state.settings.carryOverOvertime ? 'bank.empty' : 'bank.emptyMonth'));
 }
 
 function renderBankHistory() {
@@ -1096,7 +1108,7 @@ function bindAppEvents() {
   wf.addEventListener('submit', (e) => {
     e.preventDefault();
     const minutes = withdrawMinutes();
-    const err = !wf.date.value ? { key: 'error.dateRequired' } : validateWithdrawal(minutes, balance());
+    const err = !wf.date.value ? { key: 'error.dateRequired' } : validateWithdrawal(minutes, balance(wf.date.value));
     if (err) return setError($('#withdraw-error'), tr(err));
     store.addWithdrawal(state.user.uid, { date: wf.date.value, minutes, note: wf.note.value })
       .catch((er) => toast(t('toast.saveFailed', { error: er.message }), 'error'));

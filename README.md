@@ -63,7 +63,8 @@ Data in Firestore:
 In an attendance record, `type` is the absence type. `absenceHours` (in hours, empty = whole day) marks a
 partial absence and `filled: true` marks an automatically filled record.
 
-The bank balance is never stored, it is always computed from the data, so it can never get out of sync.
+The bank balance is never stored, it is always computed from the data, so it can never get out of sync. With **Carry overtime over between
+months** turned off (⚙ Settings → Rules) only the current month counts (card "Overtime this month"); no data changes and the option can be switched back any time.
 
 ## Step-by-step deployment
 
@@ -158,6 +159,7 @@ enter it, every month is balanced to zero on its own.
 | `breakAfterHours`, `breakLengthMinutes` | 6, 30 | lunch break: for every full `breakAfterHours` of stay, `breakLengthMinutes` is deducted (0 = no break). Applies to the **whole app**. |
 | `ruleVersions` | 1 version | history of calculation rules `[{ from, dailyFundHours, breakAfterHours, breakLengthMinutes }]` – every day is computed with the version valid on its date |
 | `parityFlip` | false | swaps odd and even weeks |
+| `carryOverOvertime` | true | carry overtime over between months: `false` = every month starts at zero (bank balance, zeroing on the Today card, withdrawals and time off in lieu only from that month's overtime). Older settings without the field = carry-over on. |
 | `schedule.odd/even.{1–5}` | empty | `{ arriveAt, leaveAt }` – optional fixed arrival and departure for a day of an odd/even ISO week. The older format (departure only) is loaded as `leaveAt`. |
 
 **Day schedule and anchor:** an empty field on the anchor side is filled with the anchor, the other one is computed.

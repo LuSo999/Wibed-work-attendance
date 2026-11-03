@@ -108,7 +108,7 @@ function stepWelcome() {
       if (el) {
         const current = ctx.getState().app.czHolidays !== false;
         if (draftHolidays === current) el.hidden = true;
-        else renderImpact(el, holidayChangeImpact({ records, withdrawals, settings, enabled: draftHolidays }));
+        else renderImpact(el, holidayChangeImpact({ records, withdrawals, settings, enabled: draftHolidays, asOf: todayStr() }));
       }
     },
   };

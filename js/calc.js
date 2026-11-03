@@ -387,10 +387,15 @@ export function monthSummary(records, y, m, withdrawals = [], rules = undefined)
   };
 }
 
-/** Celkový zůstatek banky přesčasů v minutách. */
-export function bankBalance(records, withdrawals = [], rules = undefined) {
-  const earned = records.reduce((sum, r) => sum + safeDayResult(r, rules).bankDelta, 0);
-  const withdrawn = withdrawals.reduce((sum, w) => sum + (w.minutes || 0), 0);
+/**
+ * Zůstatek banky přesčasů v minutách.
+ * @param {object} [options] { month: 'YYYY-MM' } – jen dny a výběry daného měsíce
+ *   (bez přenosu přesčasů mezi měsíci); bez month = celá historie
+ */
+export function bankBalance(records, withdrawals = [], rules = undefined, { month = null } = {}) {
+  const inPeriod = (date) => !month || (typeof date === 'string' && date.startsWith(`${month}-`));
+  const earned = records.filter((r) => inPeriod(r.date)).reduce((sum, r) => sum + safeDayResult(r, rules).bankDelta, 0);
+  const withdrawn = withdrawals.filter((w) => inPeriod(w.date)).reduce((sum, w) => sum + (w.minutes || 0), 0);
   return earned - withdrawn;
 }
 

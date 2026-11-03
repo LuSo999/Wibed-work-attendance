@@ -687,4 +687,11 @@ export default {
   'relax.done': {
     one: 'Kotva uvolněna pro {count} den.', few: 'Kotva uvolněna pro {count} dny.', many: 'Kotva uvolněna pro {count} dne.', other: 'Kotva uvolněna pro {count} dnů.',
   },
+  // Přenos přesčasů mezi měsíci
+  'settings.carryOver': 'Přenášet přesčasy mezi měsíci',
+  'settings.carryOverHint': 'Zapnuto: banka je součet přesčasů a čerpání za celou historii. Vypnuto: každý měsíc začíná na nule – banka, vynulování na kartě Dnes i výběr náhradního volna počítají jen s přesčasy daného měsíce. Data se nemění, přepnout jde kdykoli zpět.',
+  'settings.carryOn': 'Přesčasy se přenášejí mezi měsíci',
+  'settings.carryOff': 'Přesčasy se nepřenášejí – banka ukazuje jen tento měsíc',
+  'bank.titleMonth': 'Přesčasy tento měsíc',
+  'bank.emptyMonth': 'V tomto měsíci nejsou přesčasy k výběru (přesčasy se mezi měsíci nepřenášejí).',
 };

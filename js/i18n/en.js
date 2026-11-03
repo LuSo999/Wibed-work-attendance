@@ -667,4 +667,11 @@ export default {
   'relax.noDays': 'Relaxing the anchor will not help: only days with fixed times remain.',
   'relax.noEffect': 'Relaxing the anchor will not help: even moving the anchor within the core time and bounds does not balance the month.',
   'relax.done': { one: 'Anchor relaxed for {count} day.', other: 'Anchor relaxed for {count} days.' },
+  // Carrying overtime over between months
+  'settings.carryOver': 'Carry overtime over between months',
+  'settings.carryOverHint': 'On: the bank is the sum of overtime and usage over the whole history. Off: every month starts at zero – the bank, zeroing on the Today card and taking time off in lieu only use the overtime of that month. No data changes, you can switch back any time.',
+  'settings.carryOn': 'Overtime is carried over between months',
+  'settings.carryOff': 'Overtime is not carried over – the bank shows this month only',
+  'bank.titleMonth': 'Overtime this month',
+  'bank.emptyMonth': 'There is no overtime to take this month (overtime is not carried over between months).',
 };

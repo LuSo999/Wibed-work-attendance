@@ -196,6 +196,7 @@ function renderSettingsForm(settings) {
   }
   f.anchorMode.value = settings.anchorMode;
   f.anchorStrength.value = settings.anchorStrength;
+  f.carryOverOvertime.checked = settings.carryOverOvertime;
   $('#anchor-strength-hint').textContent = t(`anchorStrength.hint.${settings.anchorStrength}`, { coreStart: settings.coreStart, coreEnd: settings.coreEnd });
   f.czHolidays.checked = ctx.getState().app?.czHolidays !== false;
   $('#anchor-hint').textContent = settings.anchorStrength === 'off' ? t('settings.anchorHintOff', { time: settings.anchorTime })
@@ -245,6 +246,7 @@ function onSettingsChange(e) {
   for (const name of TIME_FIELDS) raw[name] = f[name].value;
   for (const name of NUMBER_FIELDS) raw[name] = f[name].valueAsNumber;
   raw.anchorStrength = f.anchorStrength.value;
+  raw.carryOverOvertime = f.carryOverOvertime.checked;
   const breakErr = !(raw.dailyFundHours > 0 && raw.dailyFundHours <= 24) ? 'settings.errFund'
     : !(raw.breakAfterHours > 0 && raw.breakAfterHours <= 24) ? 'settings.errBreakAfter'
     : !(Number.isInteger(raw.breakLengthMinutes) && raw.breakLengthMinutes >= 0) ? 'settings.errBreakLength'
@@ -261,6 +263,11 @@ function onSettingsChange(e) {
   for (const k of RULE_FIELDS) raw[k] = settings[k];
   const next = normalizeSettings(raw);
   ctx.saveSettings(next);
+  if (e.target.name === 'carryOverOvertime') {
+    // nic se nepřepočítává ani nemaže, mění se jen období zůstatku banky
+    toast(t(next.carryOverOvertime ? 'settings.carryOn' : 'settings.carryOff'));
+    return;
+  }
   const warns = settingsWarnings(next).filter((w) => w.field !== 'schedule');
   toast(t(warns.length ? 'toast.savedCheckWarnings' : 'settings.saved'));
 }
@@ -282,8 +289,8 @@ function updateRulesDialog() {
   const f = $('#form-rules');
   f.from.disabled = f.scope.value === 'all';
   const impact = rulesChange.kind === 'holidays'
-    ? holidayChangeImpact({ records, withdrawals, settings, enabled: rulesChange.enabled })
-    : ruleChangeImpact({ records, withdrawals, settings: rulesChange.settings, next: rulesDialogNext() });
+    ? holidayChangeImpact({ records, withdrawals, settings, enabled: rulesChange.enabled, asOf: todayStr() })
+    : ruleChangeImpact({ records, withdrawals, settings: rulesChange.settings, next: rulesDialogNext(), asOf: todayStr() });
   renderImpact($('#rules-impact'), impact);
 }
 

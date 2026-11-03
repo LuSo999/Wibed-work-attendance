@@ -163,6 +163,19 @@ test('banka přesčasů: přesčasy − náhradní volno − výběry', () => {
   assert.equal(bankBalance([{ date: '2025-03-03', type: 'work', arrival: '17:00', departure: '08:00' }]), 0);
 });
 
+test('banka jen za měsíc (bez přenosu přesčasů mezi měsíci)', () => {
+  // březen: +1:30 −0:30 −8:00 (náhradní volno) +4:00 (sobota) − výběr 1:00; únor: +5:00 − výběr 0:30
+  assert.equal(bankBalance(records, withdrawals, undefined, { month: '2025-03' }), 90 - 30 - 480 + 240 - 60);
+  assert.equal(bankBalance(records, withdrawals, undefined, { month: '2025-02' }), 300 - 30);
+  assert.equal(bankBalance(records, withdrawals, undefined, { month: '2025-04' }), 0);
+  // součet měsíců = celá historie; bez month beze změny
+  assert.equal(
+    bankBalance(records, withdrawals, undefined, { month: '2025-02' }) + bankBalance(records, withdrawals, undefined, { month: '2025-03' }),
+    bankBalance(records, withdrawals),
+  );
+  assert.equal(bankBalance(records, withdrawals, undefined, { month: null }), bankBalance(records, withdrawals));
+});
+
 test('validace výběru z banky', () => {
   assert.equal(validateWithdrawal(60, 120), null);
   assert.equal(validateWithdrawal(120, 120), null);

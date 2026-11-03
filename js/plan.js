@@ -48,6 +48,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   breakAfterHours: 6,
   breakLengthMinutes: 30,
   parityFlip: false,
+  /**
+   * Přenášet přesčasy mezi měsíci: true = banka je součet celé historie, false = každý měsíc
+   * začíná na nule (zůstatek = přesčasy a čerpání jen v daném měsíci).
+   */
+  carryOverOvertime: true,
   /** Rozvrh: pro každý den lichého/sudého týdne volitelný pevný příchod a odchod. */
   schedule: {
     odd: Object.fromEntries([1, 2, 3, 4, 5].map((d) => [d, { arriveAt: '', leaveAt: '' }])),
@@ -127,6 +132,8 @@ export function normalizeSettings(raw = {}) {
     breakLengthMinutes,
     ruleVersions,
     parityFlip: Boolean(raw.parityFlip),
+    // nastavení bez pole (starší data) = přenos zapnutý
+    carryOverOvertime: raw.carryOverOvertime !== false,
     schedule,
   };
 }
@@ -174,27 +181,37 @@ export function isRuleChange(settings, patch) {
  * Dopad změny pravidel na historii: zůstatek banky před a po a počet uzavřených
  * dnů, jejichž výsledek se změní.
  */
-export function ruleChangeImpact({ records, withdrawals = [], settings, next }) {
+export function ruleChangeImpact({ records, withdrawals = [], settings, next, asOf = null }) {
   const before = rulesFromSettings(normalizeSettings(settings));
   const after = rulesFromSettings(normalizeSettings(next));
-  return historyImpact(records, withdrawals, { rules: before }, { rules: after });
+  return historyImpact(records, withdrawals, { rules: before }, { rules: after }, balanceMonth(settings, asOf));
+}
+
+/**
+ * Období zůstatku banky: bez přenosu přesčasů měsíc data ('YYYY-MM'), jinak null (celá historie).
+ * @param {object} settings nastavení plánu
+ * @param {string|null} date 'YYYY-MM-DD' (typicky dnešek nebo datum výběru)
+ */
+export function balanceMonth(settings, date) {
+  if (normalizeSettings(settings).carryOverOvertime || !date) return null;
+  return date.slice(0, 7);
 }
 
 /**
  * Dopad zapnutí/vypnutí státních svátků na historii (svátky platí vždy zpětně).
  * Konfiguraci svátků v calc.js dočasně přepne a vrátí do původního stavu.
  */
-export function holidayChangeImpact({ records, withdrawals = [], settings, enabled }) {
+export function holidayChangeImpact({ records, withdrawals = [], settings, enabled, asOf = null }) {
   const rules = rulesFromSettings(normalizeSettings(settings));
-  return historyImpact(records, withdrawals, { rules, holidays: holidaysEnabled() }, { rules, holidays: Boolean(enabled) });
+  return historyImpact(records, withdrawals, { rules, holidays: holidaysEnabled() }, { rules, holidays: Boolean(enabled) }, balanceMonth(settings, asOf));
 }
 
-/** Porovná výsledky uzavřených dnů a banky ve dvou konfiguracích {rules, holidays?}. */
-function historyImpact(records, withdrawals, before, after) {
+/** Porovná výsledky uzavřených dnů a banky ve dvou konfiguracích {rules, holidays?}; month = zůstatek jen za měsíc. */
+function historyImpact(records, withdrawals, before, after, month = null) {
   const was = holidaysEnabled();
   const run = ({ rules, holidays = was }) => {
     configureHolidays({ enabled: holidays });
-    return { days: records.map((r) => safeDayResult(r, rules)), balance: bankBalance(records, withdrawals, rules) };
+    return { days: records.map((r) => safeDayResult(r, rules)), balance: bankBalance(records, withdrawals, rules, { month }) };
   };
   try {
     const a = run(before);

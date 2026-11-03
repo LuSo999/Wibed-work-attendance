@@ -165,7 +165,7 @@
       <div id="tab-overview" class="space-y-4">
         <div id="overview-week" class="flex flex-wrap items-center gap-2" data-hide-compact data-hide-quick></div>
         <div data-hide-quick class="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-5 text-white shadow-lg shadow-indigo-600/20">
-          <p class="text-sm font-medium text-indigo-100" data-i18n="bank.title"></p>
+          <p id="bank-title" class="text-sm font-medium text-indigo-100"></p>
           <p id="bank-balance" class="tabular mt-1 text-4xl font-bold tracking-tight">–</p>
           <div class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm text-indigo-100" data-hide-compact>
             <span><span data-i18n="bank.thisMonth"></span> <b id="bank-month" class="tabular text-white">–</b></span>
@@ -353,7 +353,7 @@
       <!-- ---------- Banka ---------- -->
       <div id="tab-bank" class="space-y-4" hidden>
         <div class="rounded-2xl bg-gradient-to-br from-indigo-600 to-violet-600 p-5 text-white shadow-lg shadow-indigo-600/20">
-          <p class="text-sm font-medium text-indigo-100" data-i18n="bank.balanceTitle"></p>
+          <p id="bank-title-2" class="text-sm font-medium text-indigo-100"></p>
           <p id="bank-balance-2" class="tabular mt-1 text-4xl font-bold tracking-tight">–</p>
         </div>
         <form id="form-withdraw" class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-800" novalidate>
@@ -452,6 +452,13 @@
               <input name="dailyFundHours" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
             <label class="block"><span class="text-sm font-medium text-slate-600 dark:text-slate-400" data-i18n="settings.maxWorked"></span>
               <input name="maxWorkedHoursPerDay" type="number" min="0.25" max="24" step="0.25" inputmode="decimal" class="tabular mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800"></label>
+            <div class="col-span-full rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
+              <label class="flex items-start gap-2 text-sm">
+                <input name="carryOverOvertime" type="checkbox" class="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 dark:border-slate-600">
+                <span><span class="font-semibold" data-i18n="settings.carryOver"></span>
+                  <span class="mt-0.5 block text-xs text-slate-600 dark:text-slate-400" data-i18n="settings.carryOverHint"></span></span>
+              </label>
+            </div>
             <fieldset class="col-span-full rounded-xl bg-slate-50 p-3 dark:bg-slate-800/50">
               <legend class="px-1 text-sm font-semibold" data-i18n="settings.break"></legend>
               <div class="grid grid-cols-2 gap-3">

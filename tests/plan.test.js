@@ -9,7 +9,7 @@ import {
   rulesFromSettings, switchAnchorMode, timeWarnings, validateOverride, bulkClearFixed, isEmptyOverride,
   applyRuleChange, ruleChangeImpact, isRuleChange, mergeClearFixed, RULES_SINCE_EVER, holidayChangeImpact,
   CORE_WARNING_KEYS, canEditOverride, bankZeroing, dayProgress, SETTINGS_EXAMPLES, applyExample, samplePlan,
-  bulkRelaxAnchor, anchorRelaxSuggestion,
+  bulkRelaxAnchor, anchorRelaxSuggestion, balanceMonth,
 } from '../js/plan.js';
 import {
   dayResult, monthFund, configureHolidays, holidaysEnabled,
@@ -983,4 +983,31 @@ test('doporučení uvolnit kotvu: pomůže, nepomůže, není potřeba', () => {
   assert.equal(anchorRelaxSuggestion({ year: 2027, month: 2, ...MID, settings: settings(), overrides: relaxed }), null);
   // nedostatek, který posun kotvy nevyrovná ani nezlepší: max. 8 h práce (strop) → nepomůže
   assert.equal(anchorRelaxSuggestion({ year: 2027, month: 2, today: '2027-02-22', settings: settings({ maxWorkedHoursPerDay: 8 }), records: [] }).reason, 'noEffect');
+});
+
+// ---------------------------------------------------------------------------
+// Přenos přesčasů mezi měsíci
+// ---------------------------------------------------------------------------
+test('přenos přesčasů: výchozí zapnutý, vypnutý omezí zůstatek na měsíc', () => {
+  assert.equal(normalizeSettings({}).carryOverOvertime, true);              // stará data bez pole
+  assert.equal(normalizeSettings({ carryOverOvertime: false }).carryOverOvertime, false);
+  assert.equal(normalizeSettings({ carryOverOvertime: 'ne' }).carryOverOvertime, true);
+  assert.equal(balanceMonth(settings(), '2027-02-15'), null);
+  assert.equal(balanceMonth(settings({ carryOverOvertime: false }), '2027-02-15'), '2027-02');
+  assert.equal(balanceMonth(settings({ carryOverOvertime: false }), null), null);
+  // plán měsíce se přenosem nemění (každý měsíc se vyrovnává sám)
+  assert.deepEqual(plan({ carryOverOvertime: false }).summary, plan().summary);
+});
+
+test('dopad změny pravidel bez přenosu: jen zůstatek aktuálního měsíce', () => {
+  const recs = [work('2027-01-29', '06:00', '15:30'), work('2027-02-01', '06:00', '15:30')]; // každý +1:00 h (9:30 pobytu − 0:30)
+  const s = settings({ carryOverOvertime: false });
+  const next = applyRuleChange(s, { breakLengthMinutes: 45 }, RULES_SINCE_EVER);
+  const month = ruleChangeImpact({ records: recs, settings: s, next, asOf: '2027-02-10' });
+  assert.deepEqual(month, { balanceBefore: 60, balanceAfter: 45, affectedDays: 2 }); // jen únor; dotčené dny ze všech měsíců
+  const all = ruleChangeImpact({ records: recs, settings: settings(), next: applyRuleChange(settings(), { breakLengthMinutes: 45 }), asOf: '2027-02-10' });
+  assert.deepEqual(all, { balanceBefore: 120, balanceAfter: 90, affectedDays: 2 });
+  // svátky: stejné období
+  const hol = holidayChangeImpact({ records: [work('2025-12-24', '08:00', '12:00'), work('2025-11-03', '06:00', '15:30')], settings: s, enabled: false, asOf: '2025-12-10' });
+  assert.deepEqual(hol, { balanceBefore: 4 * H, balanceAfter: -4 * H, affectedDays: 1 });
 });

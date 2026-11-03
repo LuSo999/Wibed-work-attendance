@@ -63,7 +63,8 @@ Data ve Firestore:
 U záznamu docházky slouží `type` jako typ nepřítomnosti. `absenceHours` (v hodinách, prázdné = celý den) určuje
 částečnou nepřítomnost a `filled: true` označuje automaticky doplněný záznam.
 
-Zůstatek banky se neukládá, vždy se dopočítává z dat, takže nemůže vzniknout nesoulad.
+Zůstatek banky se neukládá, vždy se dopočítává z dat, takže nemůže vzniknout nesoulad. Po vypnutí **Přenášet přesčasy mezi měsíci**
+(⚙ Nastavení → Pravidla) se počítá jen za aktuální měsíc (karta „Přesčasy tento měsíc“); data se nemění a volbu jde kdykoli vrátit.
 
 ## Nasazení krok za krokem
 
@@ -158,6 +159,7 @@ každý měsíc se vyrovnává na nulu samostatně.
 | `breakAfterHours`, `breakLengthMinutes` | 6, 30 | polední přestávka: za každých celých `breakAfterHours` pobytu se odečte `breakLengthMinutes` (0 = bez přestávky). Platí pro **celou aplikaci**. |
 | `ruleVersions` | 1 verze | historie pravidel výpočtu `[{ from, dailyFundHours, breakAfterHours, breakLengthMinutes }]` – každý den se počítá podle verze platné k jeho datu |
 | `parityFlip` | false | prohodí lichý a sudý týden |
+| `carryOverOvertime` | true | přenášet přesčasy mezi měsíci: `false` = každý měsíc začíná na nule (zůstatek banky, vynulování na kartě Dnes, výběr a náhradní volno jen z přesčasů daného měsíce). Starší nastavení bez pole = přenos zapnutý. |
 | `schedule.odd/even.{1–5}` | prázdné | `{ arriveAt, leaveAt }` – volitelný pevný příchod a odchod pro den lichého/sudého ISO týdne. Dřívější formát (jen čas odchodu) se načte jako `leaveAt`. |
 
 **Rozvrh dne a kotva:** prázdné pole na straně kotvy se doplní kotvou, druhé se dopočítá.
